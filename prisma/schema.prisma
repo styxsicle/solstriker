@@ -1,0 +1,48 @@
+// Memecoin Lab — Phase 1A schema.
+// SQLite does not support Prisma enums or string lists, so:
+//  - Token.stage is a String validated at the app layer
+//    (UNCLASSIFIED | FINAL_STRETCH | MIGRATED).
+//  - TrackedWallet.groupsJson stores the full group list as a JSON array;
+//    TrackedWallet.group holds the primary (first) group for fast filtering.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model TrackedWallet {
+  id         String   @id @default(cuid())
+  address    String   @unique
+  label      String?
+  group      String?
+  groupsJson String?
+  emoji      String?
+  notes      String?
+  metaJson   String?
+  enabled    Boolean  @default(true)
+  source     String   @default("manual")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([group])
+  @@index([enabled])
+}
+
+model Token {
+  id           String   @id @default(cuid())
+  mintAddress  String   @unique
+  name         String?
+  symbol       String?
+  stage        String   @default("UNCLASSIFIED")
+  source       String   @default("dev-seed")
+  discoveredAt DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([stage])
+}

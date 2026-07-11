@@ -1,0 +1,25 @@
+# dependencies / build output
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+
+# environment (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# local SQLite databases
+prisma/dev.db
+prisma/dev.db-journal
+prisma/test.db
+prisma/test.db-journal
+*.db
+*.db-journal
+
+# local wallet exports / import files (private user data — never commit)
+/imports/
+*wallet-export*
+*tracked-wallets*
+*tracked wallets*
