@@ -9,6 +9,13 @@ export const WALLET_EVENT_TYPES = [
 
 export type WalletEventType = (typeof WALLET_EVENT_TYPES)[number];
 
+/** How certain the decoder is about a trade classification and its amounts. */
+export const DECODE_CONFIDENCE_LEVELS = ['CONFIRMED', 'LIKELY', 'UNKNOWN'] as const;
+export type DecodeConfidence = (typeof DECODE_CONFIDENCE_LEVELS)[number];
+
+/** Rows written by the Phase 1C exact-swap decoder. Version 1 = legacy heuristic. */
+export const DECODER_VERSION = 2;
+
 /** Hard cap on wallets per sync request — Phase 1B is deliberately conservative. */
 export const MAX_WALLETS_PER_SYNC = 10;
 

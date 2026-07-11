@@ -76,6 +76,7 @@ export interface SyncResult {
   duplicateEvents: number;
   tokensDiscovered: number;
   backfillComplete: boolean | null;
+  eventsCleared: number;
   error: string | null;
 }
 
@@ -115,6 +116,23 @@ export interface ActivityEvent {
   quoteMint: string | null;
   quoteAmount: number | null;
   source: string | null;
+  venue: string | null;
+  confidence: 'CONFIRMED' | 'LIKELY' | 'UNKNOWN' | null;
+  explanation: string | null;
+  swapInMint: string | null;
+  swapInAmount: number | null;
+  swapOutMint: string | null;
+  swapOutAmount: number | null;
+  walletSolChange: number | null;
+  networkFeeSol: number | null;
+  priorityFeeSol: number | null;
+  platformFeeSol: number | null;
+  tipSol: number | null;
+  rentSol: number | null;
+  unrelatedSolIn: number | null;
+  unrelatedSolOut: number | null;
+  unattributedSol: number | null;
+  decoderVersion: number;
   blockTime: string | null;
 }
 

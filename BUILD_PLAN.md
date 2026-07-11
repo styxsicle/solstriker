@@ -43,7 +43,26 @@ signing, and real trades.
 - 29 new offline tests (normalization, provider sanitization, cursors, idempotency,
   locking) — 70 total
 
-### ⏭ Phase 1C — Token metrics collection (next)
+### ✅ Phase 1C — Reliable buy/sell and swap decoding (complete)
+
+- Exact swap legs instead of wallet-outflow totals (fixed real Pump.fun case:
+  quote 1.510707025 SOL, previously misreported as 1.539120863)
+- Three decoding paths: provider swap events → venue-instruction
+  reconstruction (Pump.fun / Pump AMM / Raydium / Meteora, router-mediated
+  trades, program-credited sell proceeds) → quote-free heuristic
+- Full SOL breakdown per event: wallet change, network/priority fee,
+  platform/router fees, tips, ATA rent (incl. close refunds), unrelated
+  transfers, unattributed residue — reconciled exactly
+- Confidence levels (CONFIRMED/LIKELY/UNKNOWN) + human-readable explanations;
+  router vs execution venue preserved separately; quotes never invented
+- Additive schema migration `reliable_swap_decoding` (+16 nullable columns,
+  `decoderVersion`); wallet-scoped `POST /api/activity/resync` for re-decoding
+  (raw payloads aren't stored, so re-decode = re-fetch; documented)
+- Activity page: swap vs wallet-Δ columns, confidence pills, expandable fee
+  breakdown, unattributed warnings, per-wallet Re-sync
+- 26 new offline tests (89 total); verified against 2 real mainnet transactions
+
+### ⏭ Phase 1D — Token metrics collection (next)
 
 - Periodic token metric snapshots (price, liquidity, holders, volume)
 - Stage classification rules (`FINAL_STRETCH`, `MIGRATED`)

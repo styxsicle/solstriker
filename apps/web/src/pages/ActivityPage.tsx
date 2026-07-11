@@ -31,6 +31,21 @@ function formatAmount(value: number | null): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
+function formatSol(value: number | null): string {
+  if (value === null) return '—';
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: 9 })} SOL`;
+}
+
+function confidenceClass(confidence: string | null): string {
+  if (confidence === 'CONFIRMED') return 'status-good';
+  if (confidence === 'LIKELY') return 'status-warn';
+  return 'status-muted';
+}
+
+function hasUnattributed(value: number | null): boolean {
+  return value !== null && Math.abs(value) > 1e-9;
+}
+
 export function ActivityPage() {
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +66,8 @@ export function ActivityPage() {
   const [eventPage, setEventPage] = useState(1);
   const [typeFilter, setTypeFilter] = useState('');
   const [walletFilter, setWalletFilter] = useState('');
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [resyncingId, setResyncingId] = useState<string | null>(null);
 
   const loadCandidates = useCallback(async () => {
     try {
@@ -132,6 +149,26 @@ export function ActivityPage() {
       );
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function resyncWallet(walletId: string, label: string) {
+    const confirmed = window.confirm(
+      `Re-sync "${label}"? This clears this wallet's stored events and re-fetches its history with the current decoder. Other wallets are not affected.`,
+    );
+    if (!confirmed) return;
+    setResyncingId(walletId);
+    setError(null);
+    try {
+      await api<SyncResponse>('/api/activity/resync', {
+        method: 'POST',
+        body: JSON.stringify({ walletIds: [walletId], maxTransactions: txCap }),
+      });
+      await Promise.all([loadStatus(), loadEvents()]);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setResyncingId(null);
     }
   }
 
@@ -314,6 +351,7 @@ export function ActivityPage() {
               <th>Transactions</th>
               <th>Events</th>
               <th>Last sync</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -341,17 +379,32 @@ export function ActivityPage() {
                 <td className="status-muted">
                   {s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleString() : '—'}
                 </td>
+                <td>
+                  <button
+                    className="toggle"
+                    title="Clear this wallet's events and re-fetch with the current decoder"
+                    disabled={resyncingId !== null || !providerConfigured}
+                    onClick={() => void resyncWallet(s.walletId, s.label ?? shortAddr(s.address))}
+                  >
+                    {resyncingId === s.walletId ? 'Re-syncing…' : 'Re-sync'}
+                  </button>
+                </td>
               </tr>
             ))}
             {status && status.items.length === 0 && (
               <tr>
-                <td colSpan={7} className="status-muted">
+                <td colSpan={8} className="status-muted">
                   Nothing synced yet. Select wallets above and run a sync.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+        <p className="hint">
+          Events stored before the current decoder are marked in the feed below; use Re-sync to
+          re-decode a wallet's history (raw transaction payloads are not stored locally, so
+          re-decoding requires re-fetching).
+        </p>
       </div>
 
       <div className="panel">
@@ -396,51 +449,151 @@ export function ActivityPage() {
               <th>Type</th>
               <th>Token</th>
               <th>Amount</th>
-              <th>Quote</th>
-              <th>Source</th>
+              <th>Swap quote</th>
+              <th>Wallet Δ SOL</th>
+              <th>Router → venue</th>
+              <th>Conf.</th>
               <th>Tx</th>
             </tr>
           </thead>
           <tbody>
-            {events?.items.map((e) => (
-              <tr key={e.id}>
-                <td className="status-muted">
-                  {e.blockTime ? new Date(e.blockTime).toLocaleString() : '—'}
-                </td>
-                <td>{labelFor(e.wallet)}</td>
-                <td>
-                  <span className={`pill ${typeClass(e.eventType)}`}>{e.eventType}</span>
-                </td>
-                <td className="mono">
-                  {e.token ? (
+            {events?.items.map((e) => {
+              const isTrade = e.eventType === 'BUY' || e.eventType === 'SELL';
+              const quoteUnknown = isTrade && e.quoteAmount === null;
+              const warn = hasUnattributed(e.unattributedSol) || e.decoderVersion < 2;
+              const expanded = expandedEventId === e.id;
+              return [
+                <tr
+                  key={e.id}
+                  onClick={() => setExpandedEventId(expanded ? null : e.id)}
+                  style={{ cursor: 'pointer' }}
+                  title="Click for the full decoding breakdown"
+                >
+                  <td className="status-muted">
+                    {e.blockTime ? new Date(e.blockTime).toLocaleString() : '—'}
+                  </td>
+                  <td>{labelFor(e.wallet)}</td>
+                  <td>
+                    <span className={`pill ${typeClass(e.eventType)}`}>{e.eventType}</span>
+                  </td>
+                  <td className="mono">
+                    {e.token ? (
+                      <a
+                        href={`https://solscan.io/token/${e.token.mintAddress}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(ev) => ev.stopPropagation()}
+                      >
+                        {e.token.symbol ?? shortAddr(e.token.mintAddress)}
+                      </a>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td>{formatAmount(e.tokenAmount)}</td>
+                  <td>
+                    {e.quoteAmount !== null ? (
+                      `${formatAmount(e.quoteAmount)} ${
+                        e.quoteMint === 'SOL' ? 'SOL' : (e.quoteMint ?? '')
+                      }`
+                    ) : quoteUnknown ? (
+                      <span className="status-warn">unknown</span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className={e.walletSolChange !== null && e.walletSolChange < 0 ? 'status-bad' : 'status-good'}>
+                    {e.walletSolChange !== null ? formatAmount(e.walletSolChange) : '—'}
+                  </td>
+                  <td className="status-muted">
+                    {e.source && e.venue && e.source !== e.venue
+                      ? `${e.source} → ${e.venue}`
+                      : (e.venue ?? e.source ?? '—')}
+                  </td>
+                  <td>
+                    <span className={`pill ${confidenceClass(e.confidence)}`}>
+                      {e.confidence ?? 'v1'}
+                    </span>
+                    {warn && (
+                      <span
+                        className="status-warn"
+                        title={
+                          e.decoderVersion < 2
+                            ? 'Decoded by the legacy decoder — re-sync this wallet for exact amounts'
+                            : `Unattributed SOL difference: ${formatSol(e.unattributedSol)}`
+                        }
+                      >
+                        {' '}
+                        ⚠
+                      </span>
+                    )}
+                  </td>
+                  <td className="mono">
                     <a
-                      href={`https://solscan.io/token/${e.token.mintAddress}`}
+                      href={`https://solscan.io/tx/${e.signature}`}
                       target="_blank"
                       rel="noreferrer"
+                      onClick={(ev) => ev.stopPropagation()}
                     >
-                      {e.token.symbol ?? shortAddr(e.token.mintAddress)}
+                      {e.signature.slice(0, 8)}…
                     </a>
-                  ) : (
-                    '—'
-                  )}
-                </td>
-                <td>{formatAmount(e.tokenAmount)}</td>
-                <td>
-                  {e.quoteAmount !== null
-                    ? `${formatAmount(e.quoteAmount)} ${e.quoteMint === 'SOL' ? 'SOL' : 'USD'}`
-                    : '—'}
-                </td>
-                <td className="status-muted">{e.source ?? '—'}</td>
-                <td className="mono">
-                  <a href={`https://solscan.io/tx/${e.signature}`} target="_blank" rel="noreferrer">
-                    {e.signature.slice(0, 8)}…
-                  </a>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                </tr>,
+                expanded ? (
+                  <tr key={`${e.id}-detail`}>
+                    <td colSpan={10} style={{ background: 'var(--panel-2)' }}>
+                      <div style={{ padding: '10px 6px', fontSize: 13, lineHeight: 1.7 }}>
+                        {e.decoderVersion < 2 && (
+                          <div className="status-warn" style={{ marginBottom: 6 }}>
+                            ⚠ Legacy event (decoder v1): amounts may include fees. Re-sync this
+                            wallet to re-decode with exact swap legs.
+                          </div>
+                        )}
+                        {e.explanation && <div style={{ marginBottom: 8 }}>{e.explanation}</div>}
+                        <div className="import-summary" style={{ marginTop: 0 }}>
+                          <span>
+                            swap in <strong>{e.swapInAmount !== null ? `${formatAmount(e.swapInAmount)} ${e.swapInMint === 'SOL' ? 'SOL' : (e.swapInMint ? shortAddr(e.swapInMint) : '')}` : 'unknown'}</strong>
+                          </span>
+                          <span>
+                            swap out <strong>{e.swapOutAmount !== null ? `${formatAmount(e.swapOutAmount)} ${e.swapOutMint === 'SOL' ? 'SOL' : (e.swapOutMint ? shortAddr(e.swapOutMint) : '')}` : 'unknown'}</strong>
+                          </span>
+                          <span>
+                            wallet Δ <strong>{formatSol(e.walletSolChange)}</strong>
+                          </span>
+                          <span>
+                            network fee <strong>{formatSol(e.networkFeeSol)}</strong>
+                          </span>
+                          <span>
+                            priority fee <strong>{formatSol(e.priorityFeeSol)}</strong>
+                          </span>
+                          <span>
+                            platform fee <strong>{formatSol(e.platformFeeSol)}</strong>
+                          </span>
+                          <span>
+                            tip <strong>{formatSol(e.tipSol)}</strong>
+                          </span>
+                          <span>
+                            rent <strong>{formatSol(e.rentSol)}</strong>
+                          </span>
+                          <span>
+                            unrelated in/out{' '}
+                            <strong>
+                              {formatSol(e.unrelatedSolIn)} / {formatSol(e.unrelatedSolOut)}
+                            </strong>
+                          </span>
+                          <span className={hasUnattributed(e.unattributedSol) ? 'status-warn' : ''}>
+                            unattributed <strong>{formatSol(e.unattributedSol)}</strong>
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ) : null,
+              ];
+            })}
             {events && events.items.length === 0 && (
               <tr>
-                <td colSpan={8} className="status-muted">
+                <td colSpan={10} className="status-muted">
                   No events recorded yet.
                 </td>
               </tr>

@@ -1,8 +1,8 @@
 # Memecoin Lab
 
 A **local** Solana memecoin research and paper-trading application, built in small
-checkpoints. Current checkpoint: **Phase 1B — historical wallet activity ingestion**
-(Phase 1A: foundation, wallet import, RPC status).
+checkpoints. Current checkpoint: **Phase 1C — reliable buy/sell and swap decoding**
+(1A: foundation, wallet import, RPC status; 1B: historical activity ingestion).
 
 This tool is read-only research software. It **never** asks for private keys or seed
 phrases, never signs transactions, and never places real trades.
@@ -104,6 +104,27 @@ wallets — deliberately conservative with 1,000+ wallets tracked:
   currencies. Re-syncing is idempotent (events are deduplicated).
 - Tokens seen in activity are added to the token database automatically
   (`source: activity`); names/symbols are enriched in a later phase.
+
+### Reliable swap decoding (Phase 1C)
+
+Swap amounts are **exact swap legs, never wallet-balance totals**. Fees, tips,
+token-account rent, and unrelated transfers are separated from the swap itself:
+
+- Decoding paths: provider-decoded swap events; venue-instruction
+  reconstruction (Pump.fun, Pump AMM, Raydium, Meteora — handles
+  router-mediated trades such as Axiom → Pump.fun, including sell proceeds
+  credited directly by the program); and a heuristic fallback that **never
+  invents quotes** — if the exact amount can't be established, the quote is
+  shown as *unknown* and the unexplained flow is recorded as *unattributed*.
+- Every event carries a confidence level (`CONFIRMED` / `LIKELY` / `UNKNOWN`),
+  a human-readable explanation, the router/originating app and the actual
+  execution venue, plus a full SOL breakdown (total wallet change, network +
+  priority fee, platform/router fees, tips, rent, unrelated, unattributed) —
+  click any event row on the Activity page to expand it.
+- Events stored by the older decoder are marked (⚠ v1). Raw transaction
+  payloads are not stored locally, so they can't be re-decoded in place — use
+  the per-wallet **Re-sync** button (or `POST /api/activity/resync`) to clear
+  just that wallet's events and re-fetch with the current decoder.
 
 Requires `HELIUS_API_KEY` in `.env`. All provider calls happen on the backend;
 errors are reduced to sanitized codes (`rate_limited`, `provider_error`, …) so the

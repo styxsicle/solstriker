@@ -7,6 +7,9 @@ export {
 } from './solana.js';
 export {
   WALLET_EVENT_TYPES,
+  DECODE_CONFIDENCE_LEVELS,
+  DECODER_VERSION,
+  type DecodeConfidence,
   MAX_WALLETS_PER_SYNC,
   DEFAULT_TX_PER_SYNC,
   MAX_TX_PER_SYNC,

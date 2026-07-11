@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { DECODER_VERSION } from '@memecoin-lab/shared';
 import type { SolanaActivityProvider } from '../../providers/solana/provider.js';
 import { ProviderError } from '../../providers/solana/types.js';
 import { normalizeTransaction, type NormalizedWalletEvent } from './normalizeTransaction.js';
@@ -28,6 +29,12 @@ export interface SyncWalletOptions {
   pageSize?: number;
   /** Pause between provider pages (rate limiting). Tests pass 0. */
   pauseMs?: number;
+  /**
+   * Wallet-scoped re-sync: delete this wallet's stored events and sync state
+   * (under the sync lock) before fetching, so history is re-decoded with the
+   * current decoder. Never touches other wallets or the database as a whole.
+   */
+  resetBeforeSync?: boolean;
 }
 
 export interface SyncWalletResult {
@@ -39,6 +46,8 @@ export interface SyncWalletResult {
   duplicateEvents: number;
   tokensDiscovered: number;
   backfillComplete: boolean | null;
+  /** Events removed by a resetBeforeSync re-sync (0 otherwise). */
+  eventsCleared: number;
   error: string | null;
 }
 
@@ -110,6 +119,23 @@ async function persistEvents(
         source: e.source,
         slot: e.slot,
         blockTime: e.timestamp !== null ? new Date(e.timestamp * 1000) : null,
+        venue: e.venue,
+        confidence: e.confidence,
+        explanation: e.explanation,
+        swapInMint: e.swapInMint,
+        swapInAmount: e.swapInAmount,
+        swapOutMint: e.swapOutMint,
+        swapOutAmount: e.swapOutAmount,
+        walletSolChange: e.breakdown.walletSolChange,
+        networkFeeSol: e.breakdown.networkFeeSol,
+        priorityFeeSol: e.breakdown.priorityFeeSol,
+        platformFeeSol: e.breakdown.platformFeeSol,
+        tipSol: e.breakdown.tipSol,
+        rentSol: e.breakdown.rentSol,
+        unrelatedSolIn: e.breakdown.unrelatedSolIn,
+        unrelatedSolOut: e.breakdown.unrelatedSolOut,
+        unattributedSol: e.breakdown.unattributedSol,
+        decoderVersion: DECODER_VERSION,
       })),
     });
   }
@@ -146,6 +172,7 @@ export async function syncWallet(
     duplicateEvents: 0,
     tokensDiscovered: 0,
     backfillComplete: null,
+    eventsCleared: 0,
     error: null,
   };
 
@@ -155,6 +182,17 @@ export async function syncWallet(
 
   const { prisma, provider } = deps;
   try {
+    let eventsCleared = 0;
+    if (options.resetBeforeSync) {
+      // Scoped strictly to this wallet; runs under the sync lock.
+      const [deleted] = await prisma.$transaction([
+        prisma.walletEvent.deleteMany({ where: { walletId: wallet.id } }),
+        prisma.walletSyncState.deleteMany({ where: { walletId: wallet.id } }),
+      ]);
+      eventsCleared = deleted.count;
+      base.eventsCleared = eventsCleared;
+    }
+
     const state = await prisma.walletSyncState.upsert({
       where: { walletId: wallet.id },
       create: { walletId: wallet.id, status: 'syncing' },
@@ -237,6 +275,7 @@ export async function syncWallet(
       duplicateEvents: duplicates,
       tokensDiscovered,
       backfillComplete,
+      eventsCleared,
     };
   } catch (err) {
     // Only sanitized codes are stored/returned — never raw provider messages.

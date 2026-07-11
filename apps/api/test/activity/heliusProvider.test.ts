@@ -74,12 +74,85 @@ describe('heliusProvider', () => {
       failed: false,
     });
     expect(txs[0].tokenTransfers).toEqual([
-      { mint: 'MintA', fromUserAccount: 'X', toUserAccount: 'Y', tokenAmount: 12.5 },
+      {
+        mint: 'MintA',
+        fromUserAccount: 'X',
+        toUserAccount: 'Y',
+        fromTokenAccount: null,
+        toTokenAccount: null,
+        tokenAmount: 12.5,
+      },
     ]);
     expect(txs[0].nativeTransfers).toEqual([
       { fromUserAccount: 'X', toUserAccount: 'Y', lamports: 1000 },
     ]);
     expect(txs[1]).toMatchObject({ signature: 'sig-2', failed: true });
+  });
+
+  it('maps decoded swap events, fees, and account balance changes', async () => {
+    const provider = createHeliusProvider({
+      apiKey: FAKE_KEY,
+      cluster: 'mainnet-beta',
+      fetchImpl: async () =>
+        jsonResponse([
+          {
+            signature: 'sig-swap',
+            timestamp: 1_750_000_000,
+            type: 'SWAP',
+            source: 'PUMP_FUN',
+            fee: 105000,
+            feePayer: 'WalletX',
+            transactionError: null,
+            accountData: [
+              { account: 'WalletX', nativeBalanceChange: -1539120863 },
+              { account: 'NewAta', nativeBalanceChange: 2039280 },
+            ],
+            events: {
+              swap: {
+                nativeInput: { account: 'WalletX', amount: '1510707025' }, // string lamports
+                nativeOutput: null,
+                tokenInputs: [],
+                tokenOutputs: [
+                  {
+                    userAccount: 'WalletX',
+                    mint: 'MemeMint',
+                    rawTokenAmount: { tokenAmount: '15606894907348', decimals: 6 },
+                  },
+                ],
+                nativeFees: [{ account: 'FeeVault', amount: '15107070' }],
+                tokenFees: [],
+                innerSwaps: [{ programInfo: { source: 'PUMP_AMM' } }],
+              },
+            },
+            instructions: [
+              {
+                programId: 'RouterProg',
+                accounts: ['WalletX', 'Curve'],
+                innerInstructions: [{ programId: 'VenueProg', accounts: ['Curve', 'Vault'] }],
+              },
+            ],
+          },
+        ]),
+    });
+
+    const [tx] = await provider.getWalletTransactions(ADDRESS);
+    expect(tx.feeLamports).toBe(105000);
+    expect(tx.feePayer).toBe('WalletX');
+    expect(tx.accountBalanceChanges).toEqual([
+      { account: 'WalletX', lamportsChange: -1539120863 },
+      { account: 'NewAta', lamportsChange: 2039280 },
+    ]);
+    expect(tx.swap).not.toBeNull();
+    expect(tx.swap!.nativeInput).toEqual({ account: 'WalletX', lamports: 1510707025 });
+    expect(tx.swap!.tokenOutputs).toEqual([
+      { userAccount: 'WalletX', mint: 'MemeMint', tokenAmount: 15606894.907348 },
+    ]);
+    expect(tx.swap!.nativeFees).toEqual([{ account: 'FeeVault', lamports: 15107070 }]);
+    expect(tx.swap!.innerVenues).toEqual(['PUMP_AMM']);
+    expect(tx.programInvocations).toEqual([
+      { programId: 'RouterProg', accounts: ['WalletX', 'Curve'] },
+      { programId: 'VenueProg', accounts: ['Curve', 'Vault'] },
+    ]);
   });
 
   it('retries rate limits and eventually succeeds', async () => {

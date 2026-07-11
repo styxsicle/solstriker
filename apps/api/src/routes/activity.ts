@@ -38,8 +38,12 @@ export interface ActivityRouteDeps {
 export function registerActivityRoutes(app: FastifyInstance, deps: ActivityRouteDeps) {
   const { prisma, provider } = deps;
 
-  app.post('/api/activity/sync', async (request, reply) => {
-    const body = syncBodySchema.safeParse(request.body);
+  async function runSyncRequest(
+    rawBody: unknown,
+    reply: import('fastify').FastifyReply,
+    resetBeforeSync: boolean,
+  ) {
+    const body = syncBodySchema.safeParse(rawBody);
     if (!body.success) {
       return reply.code(400).send({ error: 'validation_error', issues: body.error.issues });
     }
@@ -71,12 +75,24 @@ export function registerActivityRoutes(app: FastifyInstance, deps: ActivityRoute
         await syncWallet(
           { prisma, provider },
           { id: wallet.id, address: wallet.address },
-          { maxTransactions: body.data.maxTransactions, ...deps.syncOptions },
+          { maxTransactions: body.data.maxTransactions, resetBeforeSync, ...deps.syncOptions },
         ),
       );
     }
     return { results };
-  });
+  }
+
+  app.post('/api/activity/sync', async (request, reply) =>
+    runSyncRequest(request.body, reply, false),
+  );
+
+  // Wallet-scoped re-sync: clears the selected wallets' stored events and
+  // cursors (under the sync lock), then re-fetches so history is re-decoded
+  // with the current decoder. Raw provider payloads are not stored in the
+  // database, so re-decoding without re-fetching is impossible by design.
+  app.post('/api/activity/resync', async (request, reply) =>
+    runSyncRequest(request.body, reply, true),
+  );
 
   app.get('/api/activity/status', async () => {
     const states = await prisma.walletSyncState.findMany({
@@ -149,6 +165,23 @@ export function registerActivityRoutes(app: FastifyInstance, deps: ActivityRoute
         quoteMint: e.quoteMint,
         quoteAmount: e.quoteAmount,
         source: e.source,
+        venue: e.venue,
+        confidence: e.confidence,
+        explanation: e.explanation,
+        swapInMint: e.swapInMint,
+        swapInAmount: e.swapInAmount,
+        swapOutMint: e.swapOutMint,
+        swapOutAmount: e.swapOutAmount,
+        walletSolChange: e.walletSolChange,
+        networkFeeSol: e.networkFeeSol,
+        priorityFeeSol: e.priorityFeeSol,
+        platformFeeSol: e.platformFeeSol,
+        tipSol: e.tipSol,
+        rentSol: e.rentSol,
+        unrelatedSolIn: e.unrelatedSolIn,
+        unrelatedSolOut: e.unrelatedSolOut,
+        unattributedSol: e.unattributedSol,
+        decoderVersion: e.decoderVersion,
         blockTime: e.blockTime?.toISOString() ?? null,
       })),
       page,

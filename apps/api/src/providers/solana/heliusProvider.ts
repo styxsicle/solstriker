@@ -1,7 +1,11 @@
 import type { GetTransactionsOptions, SolanaActivityProvider } from './provider.js';
 import {
   ProviderError,
+  type SolanaAccountBalanceChange,
   type SolanaNativeTransfer,
+  type SolanaSwapEvent,
+  type SolanaSwapNativeLeg,
+  type SolanaSwapTokenLeg,
   type SolanaTokenTransfer,
   type SolanaTransaction,
 } from './types.js';
@@ -29,6 +33,8 @@ interface RawHeliusTokenTransfer {
   mint?: unknown;
   fromUserAccount?: unknown;
   toUserAccount?: unknown;
+  fromTokenAccount?: unknown;
+  toTokenAccount?: unknown;
   tokenAmount?: unknown;
 }
 
@@ -38,15 +44,57 @@ interface RawHeliusNativeTransfer {
   amount?: unknown;
 }
 
+interface RawHeliusAccountData {
+  account?: unknown;
+  nativeBalanceChange?: unknown;
+}
+
+interface RawHeliusNativeLeg {
+  account?: unknown;
+  amount?: unknown;
+}
+
+interface RawHeliusSwapTokenLeg {
+  userAccount?: unknown;
+  mint?: unknown;
+  tokenAmount?: unknown;
+  rawTokenAmount?: { tokenAmount?: unknown; decimals?: unknown };
+}
+
+interface RawHeliusInnerSwap {
+  programInfo?: { source?: unknown };
+}
+
+interface RawHeliusSwapEvent {
+  nativeInput?: RawHeliusNativeLeg | null;
+  nativeOutput?: RawHeliusNativeLeg | null;
+  tokenInputs?: RawHeliusSwapTokenLeg[];
+  tokenOutputs?: RawHeliusSwapTokenLeg[];
+  nativeFees?: RawHeliusNativeLeg[];
+  tokenFees?: RawHeliusSwapTokenLeg[];
+  innerSwaps?: RawHeliusInnerSwap[];
+}
+
+interface RawHeliusInstruction {
+  programId?: unknown;
+  accounts?: unknown;
+  innerInstructions?: RawHeliusInstruction[];
+}
+
 interface RawHeliusTransaction {
   signature?: unknown;
   slot?: unknown;
   timestamp?: unknown;
   type?: unknown;
   source?: unknown;
+  fee?: unknown;
+  feePayer?: unknown;
   transactionError?: unknown;
   tokenTransfers?: RawHeliusTokenTransfer[];
   nativeTransfers?: RawHeliusNativeTransfer[];
+  accountData?: RawHeliusAccountData[];
+  events?: { swap?: RawHeliusSwapEvent | null };
+  instructions?: RawHeliusInstruction[];
 }
 
 function asString(value: unknown): string | null {
@@ -55,6 +103,85 @@ function asString(value: unknown): string | null {
 
 function asNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/** Helius mixes numbers and numeric strings (e.g. lamports in swap events). */
+function asLooseNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function mapNativeLeg(raw: RawHeliusNativeLeg | null | undefined): SolanaSwapNativeLeg | null {
+  if (!raw) return null;
+  const account = asString(raw.account);
+  const lamports = asLooseNumber(raw.amount);
+  if (!account || lamports === null || lamports <= 0) return null;
+  return { account, lamports };
+}
+
+function mapSwapTokenLeg(raw: RawHeliusSwapTokenLeg): SolanaSwapTokenLeg | null {
+  const mint = asString(raw.mint);
+  if (!mint) return null;
+  let amount = asLooseNumber(raw.tokenAmount);
+  if (amount === null && raw.rawTokenAmount) {
+    const rawAmount = asLooseNumber(raw.rawTokenAmount.tokenAmount);
+    const decimals = asLooseNumber(raw.rawTokenAmount.decimals);
+    if (rawAmount !== null && decimals !== null) {
+      amount = rawAmount / 10 ** decimals;
+    }
+  }
+  if (amount === null || !(Math.abs(amount) > 0)) return null;
+  return {
+    userAccount: asString(raw.userAccount),
+    mint,
+    tokenAmount: Math.abs(amount),
+  };
+}
+
+function mapSwapEvent(raw: RawHeliusSwapEvent | null | undefined): SolanaSwapEvent | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const swap: SolanaSwapEvent = {
+    nativeInput: mapNativeLeg(raw.nativeInput),
+    nativeOutput: mapNativeLeg(raw.nativeOutput),
+    tokenInputs: (raw.tokenInputs ?? [])
+      .map(mapSwapTokenLeg)
+      .filter((l): l is SolanaSwapTokenLeg => l !== null),
+    tokenOutputs: (raw.tokenOutputs ?? [])
+      .map(mapSwapTokenLeg)
+      .filter((l): l is SolanaSwapTokenLeg => l !== null),
+    nativeFees: (raw.nativeFees ?? [])
+      .map((f) => mapNativeLeg(f))
+      .filter((l): l is SolanaSwapNativeLeg => l !== null),
+    tokenFees: (raw.tokenFees ?? [])
+      .map(mapSwapTokenLeg)
+      .filter((l): l is SolanaSwapTokenLeg => l !== null),
+    innerVenues: [
+      ...new Set(
+        (raw.innerSwaps ?? [])
+          .map((s) => asString(s.programInfo?.source))
+          .filter((s): s is string => s !== null && s !== 'UNKNOWN'),
+      ),
+    ],
+  };
+  const empty =
+    !swap.nativeInput &&
+    !swap.nativeOutput &&
+    swap.tokenInputs.length === 0 &&
+    swap.tokenOutputs.length === 0;
+  return empty ? null : swap;
+}
+
+/**
+ * Maps one raw Helius enhanced transaction into the neutral shape.
+ * Exported for offline fixtures and manual verification scripts.
+ */
+export function mapRawHeliusTransaction(rawInput: unknown): SolanaTransaction | null {
+  if (typeof rawInput !== 'object' || rawInput === null) return null;
+  return mapTransaction(rawInput as RawHeliusTransaction);
 }
 
 function mapTransaction(raw: RawHeliusTransaction): SolanaTransaction | null {
@@ -66,6 +193,8 @@ function mapTransaction(raw: RawHeliusTransaction): SolanaTransaction | null {
       mint: asString(t.mint) ?? '',
       fromUserAccount: asString(t.fromUserAccount),
       toUserAccount: asString(t.toUserAccount),
+      fromTokenAccount: asString(t.fromTokenAccount),
+      toTokenAccount: asString(t.toTokenAccount),
       tokenAmount: asNumber(t.tokenAmount) ?? Number(t.tokenAmount ?? NaN),
     }))
     .filter((t) => t.mint !== '' && Number.isFinite(t.tokenAmount));
@@ -78,6 +207,28 @@ function mapTransaction(raw: RawHeliusTransaction): SolanaTransaction | null {
     }))
     .filter((n) => Number.isFinite(n.lamports));
 
+  const accountBalanceChanges: SolanaAccountBalanceChange[] = (raw.accountData ?? [])
+    .map((a) => ({
+      account: asString(a.account) ?? '',
+      lamportsChange: asLooseNumber(a.nativeBalanceChange) ?? NaN,
+    }))
+    .filter((a) => a.account !== '' && Number.isFinite(a.lamportsChange));
+
+  const programInvocations: SolanaTransaction['programInvocations'] = [];
+  const pushInvocation = (ins: RawHeliusInstruction | undefined) => {
+    if (!ins) return;
+    const programId = asString(ins.programId);
+    if (!programId) return;
+    const accounts = Array.isArray(ins.accounts)
+      ? ins.accounts.filter((a): a is string => typeof a === 'string' && a !== '')
+      : [];
+    programInvocations.push({ programId, accounts });
+  };
+  for (const ins of raw.instructions ?? []) {
+    pushInvocation(ins);
+    for (const inner of ins?.innerInstructions ?? []) pushInvocation(inner);
+  }
+
   return {
     signature,
     slot: asNumber(raw.slot),
@@ -85,8 +236,13 @@ function mapTransaction(raw: RawHeliusTransaction): SolanaTransaction | null {
     type: asString(raw.type),
     source: asString(raw.source),
     failed: raw.transactionError !== null && raw.transactionError !== undefined,
+    feeLamports: asLooseNumber(raw.fee),
+    feePayer: asString(raw.feePayer),
     tokenTransfers,
     nativeTransfers,
+    accountBalanceChanges,
+    swap: mapSwapEvent(raw.events?.swap),
+    programInvocations,
   };
 }
 

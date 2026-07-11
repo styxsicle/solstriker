@@ -64,12 +64,31 @@ model WalletEvent {
   signature   String
   eventType   String
   tokenAmount Float?
-  quoteMint   String? // "SOL" or a stablecoin mint address
+  quoteMint   String? // "SOL" or a stablecoin mint; exact swap leg only (never invented)
   quoteAmount Float?
-  source      String? // e.g. JUPITER, PUMP_FUN, RAYDIUM (as reported by the provider)
+  source      String? // originating app / router as reported by the provider (e.g. JUPITER, AXIOM)
   slot        Int?
   blockTime   DateTime?
   createdAt   DateTime  @default(now())
+
+  // --- Phase 1C reliable swap decoding (all additive, nullable) ---
+  venue          String? // actual execution venue(s) when decoded, e.g. PUMP_AMM, RAYDIUM
+  confidence     String? // CONFIRMED | LIKELY | UNKNOWN
+  explanation    String? // human-readable reason for the classification
+  swapInMint     String? // exact decoded swap input leg
+  swapInAmount   Float?
+  swapOutMint    String? // exact decoded swap output leg
+  swapOutAmount  Float?
+  walletSolChange Float? // exact total wallet SOL balance change (signed)
+  networkFeeSol  Float?
+  priorityFeeSol Float? // identifiable portion above base fee (1-signature assumption)
+  platformFeeSol Float?
+  tipSol         Float?
+  rentSol        Float? // token-account creation / rent-exempt deposits paid
+  unrelatedSolIn Float?
+  unrelatedSolOut Float?
+  unattributedSol Float? // reconciliation residue (signed)
+  decoderVersion Int     @default(1) // 1 = legacy heuristic, 2 = Phase 1C decoder
 
   wallet TrackedWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
   token  Token?        @relation(fields: [tokenId], references: [id])
