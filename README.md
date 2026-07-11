@@ -1,7 +1,8 @@
 # Memecoin Lab
 
 A **local** Solana memecoin research and paper-trading application, built in small
-checkpoints. Current checkpoint: **Phase 1A — foundation, wallet import, RPC status**.
+checkpoints. Current checkpoint: **Phase 1B — historical wallet activity ingestion**
+(Phase 1A: foundation, wallet import, RPC status).
 
 This tool is read-only research software. It **never** asks for private keys or seed
 phrases, never signs transactions, and never places real trades.
@@ -87,6 +88,26 @@ file is safe. The result summary shows imported / duplicates / invalid / skipped
 **Privacy:** wallet export files are private user data. Keep them outside the repo
 (or in `imports/`, which is gitignored). They are imported through the dashboard at
 runtime and are never committed, hardcoded, or used in tests.
+
+## Wallet activity sync (Phase 1B)
+
+The **Activity** tab syncs historical transaction activity for manually selected
+wallets — deliberately conservative with 1,000+ wallets tracked:
+
+- Max **10 wallets per sync request** (start with 1–5); bulk sync is not supported.
+- Max 500 transactions per wallet per request (default 200). Large histories are
+  backfilled incrementally: run sync again to continue from the stored cursor
+  ("partial — sync again to continue").
+- Once backfill completes, later syncs only fetch new transactions.
+- Transactions are normalized into `BUY` / `SELL` / `TOKEN_TRANSFER_IN` /
+  `TOKEN_TRANSFER_OUT` events per token; SOL/wSOL/USDC/USDT are treated as quote
+  currencies. Re-syncing is idempotent (events are deduplicated).
+- Tokens seen in activity are added to the token database automatically
+  (`source: activity`); names/symbols are enriched in a later phase.
+
+Requires `HELIUS_API_KEY` in `.env`. All provider calls happen on the backend;
+errors are reduced to sanitized codes (`rate_limited`, `provider_error`, …) so the
+key and RPC URLs can never leak. This is read-only ingestion — no signing, no trades.
 
 ## Development seed data
 

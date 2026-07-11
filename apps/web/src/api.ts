@@ -67,6 +67,64 @@ export interface TokenListResponse {
   liveDiscovery: boolean;
 }
 
+export interface SyncResult {
+  walletId: string;
+  address: string;
+  status: 'ok' | 'locked' | 'error';
+  transactionsProcessed: number;
+  eventsCreated: number;
+  duplicateEvents: number;
+  tokensDiscovered: number;
+  backfillComplete: boolean | null;
+  error: string | null;
+}
+
+export interface SyncResponse {
+  results: SyncResult[];
+}
+
+export interface SyncStatusItem {
+  walletId: string;
+  address: string;
+  label: string | null;
+  emoji: string | null;
+  enabled: boolean;
+  status: string;
+  backfillComplete: boolean;
+  totalTransactions: number;
+  totalEvents: number;
+  lastSyncAt: string | null;
+  lastError: string | null;
+}
+
+export interface SyncStatusResponse {
+  providerConfigured: boolean;
+  maxWalletsPerSync: number;
+  items: SyncStatusItem[];
+}
+
+export interface ActivityEvent {
+  id: string;
+  walletId: string;
+  wallet: { address: string; label: string | null; emoji: string | null };
+  tokenId: string | null;
+  token: { mintAddress: string; name: string | null; symbol: string | null } | null;
+  signature: string;
+  eventType: string;
+  tokenAmount: number | null;
+  quoteMint: string | null;
+  quoteAmount: number | null;
+  source: string | null;
+  blockTime: string | null;
+}
+
+export interface ActivityEventsResponse {
+  items: ActivityEvent[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { 'content-type': 'application/json' },

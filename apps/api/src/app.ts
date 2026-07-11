@@ -3,14 +3,20 @@ import cors from '@fastify/cors';
 import type { PrismaClient } from '@prisma/client';
 import type { AppEnv } from './env.js';
 import type { RpcClient } from './rpc.js';
+import type { SolanaActivityProvider } from './providers/solana/provider.js';
 import { registerWalletRoutes } from './routes/wallets.js';
 import { registerTokenRoutes } from './routes/tokens.js';
+import { registerActivityRoutes } from './routes/activity.js';
+import type { SyncWalletOptions } from './services/activity/syncWallet.js';
 import { runDevSeed } from './services/seed.js';
 
 export interface AppDeps {
   prisma: PrismaClient;
   env: AppEnv;
   rpc: RpcClient;
+  activityProvider: SolanaActivityProvider;
+  /** Overrides for tests (e.g. pauseMs: 0). */
+  syncOptions?: Partial<SyncWalletOptions>;
   logger?: boolean | object;
 }
 
@@ -42,6 +48,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   registerWalletRoutes(app, prisma);
   registerTokenRoutes(app, prisma);
+  registerActivityRoutes(app, {
+    prisma,
+    provider: deps.activityProvider,
+    syncOptions: deps.syncOptions,
+  });
 
   app.post('/api/dev/seed', async (_request, reply) => {
     if (env.NODE_ENV === 'production') {

@@ -4,6 +4,8 @@ import type { PrismaClient } from '@prisma/client';
 import { buildApp } from '../src/app.js';
 import { createPrisma } from '../src/db.js';
 import { findRepoRoot, type AppEnv } from '../src/env.js';
+import { createHeliusProvider } from '../src/providers/solana/heliusProvider.js';
+import type { SolanaActivityProvider } from '../src/providers/solana/provider.js';
 import { createRpcClient } from '../src/rpc.js';
 
 export const TEST_DB_URL = `file:${path.join(findRepoRoot(), 'prisma', 'test.db')}`;
@@ -26,7 +28,11 @@ export interface TestApp {
 }
 
 export async function buildTestApp(
-  options: { env?: Partial<AppEnv>; fetchImpl?: typeof fetch } = {},
+  options: {
+    env?: Partial<AppEnv>;
+    fetchImpl?: typeof fetch;
+    activityProvider?: SolanaActivityProvider;
+  } = {},
 ): Promise<TestApp> {
   const env = makeTestEnv(options.env);
   const prisma = createPrisma(TEST_DB_URL);
@@ -35,11 +41,23 @@ export async function buildTestApp(
     cluster: env.SOLANA_CLUSTER,
     fetchImpl: options.fetchImpl,
   });
-  const app = await buildApp({ prisma, env, rpc });
+  // Default: an unconfigured provider — tests never touch the network.
+  const activityProvider =
+    options.activityProvider ??
+    createHeliusProvider({ apiKey: undefined, cluster: env.SOLANA_CLUSTER });
+  const app = await buildApp({
+    prisma,
+    env,
+    rpc,
+    activityProvider,
+    syncOptions: { pauseMs: 0 },
+  });
   return { app, prisma };
 }
 
 export async function resetDb(prisma: PrismaClient) {
+  await prisma.walletEvent.deleteMany();
+  await prisma.walletSyncState.deleteMany();
   await prisma.trackedWallet.deleteMany();
   await prisma.token.deleteMany();
 }

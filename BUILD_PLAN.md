@@ -27,17 +27,27 @@ signing, and real trades.
   pagination, enable/disable), token page with dev seed data
 - Vitest suites (41 tests), ESLint, production builds, docs
 
-### ⏭ Phase 1B — Wallet activity ingestion (next)
+### ✅ Phase 1B — Historical wallet activity ingestion (complete)
 
-- Fetch historical transactions/swaps for enabled tracked wallets (Helius APIs)
-- `WalletEvent` (buy/sell) model + token linkage; populate `Token` from real mints
-- Backfill job with rate limiting, cursoring, and progress reporting
-- Dashboard: recent activity feed per wallet
+- Provider interface (`SolanaActivityProvider`) with all Helius specifics isolated
+  in `heliusProvider.ts` (sanitized errors, retry/backoff, key never leaves closure)
+- `WalletEvent` model: normalized BUY / SELL / TOKEN_TRANSFER_IN / TOKEN_TRANSFER_OUT
+  per token leg, deduped by key so re-syncs are idempotent
+- `WalletSyncState`: resumable backfill cursor + incremental catch-up cursor
+- Manual sync of **max 10 selected wallets per request** (never bulk), sequential,
+  paged, rate-limit paused, per-wallet in-process locks
+- Tokens auto-created from real mints (`source: "activity"`)
+- Routes: `POST /api/activity/sync`, `GET /api/activity/status`, `GET /api/activity/events`
+- Dashboard Activity tab: wallet picker (≤10), sync results, status table, filtered
+  paginated event feed with Solscan links
+- 29 new offline tests (normalization, provider sanitization, cursors, idempotency,
+  locking) — 70 total
 
-### Phase 1C — Token metrics collection
+### ⏭ Phase 1C — Token metrics collection (next)
 
 - Periodic token metric snapshots (price, liquidity, holders, volume)
 - Stage classification rules (`FINAL_STRETCH`, `MIGRATED`)
+- Token metadata enrichment (names/symbols for activity-discovered tokens)
 
 ### Phase 2 — Wallet ranking
 

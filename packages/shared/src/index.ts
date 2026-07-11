@@ -6,6 +6,15 @@ export {
   type TokenStage,
 } from './solana.js';
 export {
+  WALLET_EVENT_TYPES,
+  MAX_WALLETS_PER_SYNC,
+  DEFAULT_TX_PER_SYNC,
+  MAX_TX_PER_SYNC,
+  WSOL_MINT,
+  STABLE_MINTS,
+  type WalletEventType,
+} from './activity.js';
+export {
   detectFormat,
   parseWalletImport,
   parseCsv,

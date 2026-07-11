@@ -1,14 +1,19 @@
 import { buildApp } from './app.js';
 import { createPrisma } from './db.js';
 import { loadEnv } from './env.js';
+import { createHeliusProvider } from './providers/solana/heliusProvider.js';
 import { createRpcClient } from './rpc.js';
 
 async function main() {
   const env = loadEnv();
   const prisma = createPrisma(env.DATABASE_URL);
   const rpc = createRpcClient({ apiKey: env.HELIUS_API_KEY, cluster: env.SOLANA_CLUSTER });
+  const activityProvider = createHeliusProvider({
+    apiKey: env.HELIUS_API_KEY,
+    cluster: env.SOLANA_CLUSTER,
+  });
 
-  const app = await buildApp({ prisma, env, rpc, logger: { level: 'info' } });
+  const app = await buildApp({ prisma, env, rpc, activityProvider, logger: { level: 'info' } });
 
   try {
     await app.listen({ port: env.API_PORT, host: '127.0.0.1' });

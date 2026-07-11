@@ -28,6 +28,9 @@ model TrackedWallet {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  events    WalletEvent[]
+  syncState WalletSyncState?
+
   @@index([group])
   @@index([enabled])
 }
@@ -44,5 +47,55 @@ model Token {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  events WalletEvent[]
+
   @@index([stage])
+}
+
+// One normalized buy/sell/transfer leg of a transaction, from the perspective
+// of a tracked wallet. eventType is a String (SQLite lacks enums) validated at
+// the app layer: BUY | SELL | TOKEN_TRANSFER_IN | TOKEN_TRANSFER_OUT.
+// dedupeKey = walletId:signature:eventType:mint — makes re-syncs idempotent.
+model WalletEvent {
+  id          String    @id @default(cuid())
+  dedupeKey   String    @unique
+  walletId    String
+  tokenId     String?
+  signature   String
+  eventType   String
+  tokenAmount Float?
+  quoteMint   String? // "SOL" or a stablecoin mint address
+  quoteAmount Float?
+  source      String? // e.g. JUPITER, PUMP_FUN, RAYDIUM (as reported by the provider)
+  slot        Int?
+  blockTime   DateTime?
+  createdAt   DateTime  @default(now())
+
+  wallet TrackedWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  token  Token?        @relation(fields: [tokenId], references: [id])
+
+  @@index([walletId, blockTime])
+  @@index([tokenId])
+  @@index([eventType])
+  @@index([signature])
+}
+
+// Per-wallet sync bookkeeping.
+// oldestSignature = backfill cursor (fetching backwards in history);
+// newestSignature = incremental cursor (stop when reached on later syncs).
+model WalletSyncState {
+  id                String    @id @default(cuid())
+  walletId          String    @unique
+  status            String    @default("idle") // idle | syncing | error
+  backfillComplete  Boolean   @default(false)
+  oldestSignature   String?
+  newestSignature   String?
+  lastSyncAt        DateTime?
+  lastError         String? // sanitized error code only — never URLs or keys
+  totalTransactions Int       @default(0)
+  totalEvents       Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  wallet TrackedWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 }
