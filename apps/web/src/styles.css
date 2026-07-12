@@ -489,4 +489,11 @@ details.helper[open] summary { margin-bottom: 6px; }
 .wallet-picker { display: grid; grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); gap: 7px 16px; margin: 12px 0; max-height: 280px; overflow: auto; }
 .position-list { display: flex; flex-direction: column; gap: 12px; }
 .position-list details.card summary { cursor: pointer; }
+.profile-grid { grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); }
+.profile-card, .position-card, .market-field { min-width: 0; }
+.market-field-value { overflow-wrap: anywhere; word-break: break-word; }
+.position-summary { display: flex; justify-content: space-between; gap: 8px 20px; flex-wrap: wrap; }
+.data-limitations { margin-top: 12px; color: var(--muted); }
+.data-limitations summary { cursor: pointer; color: var(--accent); }
+.data-limitations li { margin-top: 5px; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .wallet-picker { grid-template-columns: 1fr; } .position-list .market-grid { grid-template-columns: 1fr; } }
