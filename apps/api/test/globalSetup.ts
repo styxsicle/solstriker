@@ -15,7 +15,14 @@ export default function setup() {
 
   execSync(`npx prisma db push --schema="${schema}" --skip-generate`, {
     cwd: root,
-    env: { ...process.env, DATABASE_URL: TEST_DB_URL },
+    // Prisma 6.19's SQLite schema engine can exit without diagnostics on
+    // macOS when its Rust logger is fully disabled. Keeping engine logging at
+    // info makes creation of this disposable test database deterministic.
+    env: {
+      ...process.env,
+      DATABASE_URL: TEST_DB_URL,
+      RUST_LOG: 'schema_engine=info',
+    },
     stdio: 'pipe',
   });
 }

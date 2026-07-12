@@ -1,9 +1,10 @@
 # HANDOFF
 
 Continuation notes for any coding model/agent picking up this project.
-**Current state: Phase 1D-B1 complete** (1A foundation, 1B activity ingestion,
+**Current state: Phase 1D-B2 complete** (1A foundation, 1B activity ingestion,
 1C reliable swap decoding, 1D-A beginner-friendly UI shell, 1D-B1 current token
-market snapshots). Do not start Phase 1D-B2 until the user asks.
+market snapshots, 1D-B2 historical OHLCV and entry outcomes). Do not start
+Phase 2A until the user asks.
 
 ## What this project is
 
@@ -477,11 +478,51 @@ horizontally. Missing values show "unknown", never zero.
   headers, and raw payloads are never logged or returned. `MARKET_DATA_PROVIDER`
   is backend-only.
 
-## Exact next checkpoint (Phase 1D-B2 — wait for the user's go-ahead)
+## Phase 1D-B2 completion
 
-**Phase 1D-B2 — Historical OHLCV candle collection, bounded backfilling, and
-post-wallet-entry market outcomes.** Collect historical OHLCV candles (bounded
-backfill), compute market outcomes after a tracked wallet's entry, and add
-periodic snapshotting behind the same provider-isolation pattern. Keep
-everything read-only, offline-testable, and key-sanitized. Do not add wallet
-scoring, rankings, FOMO analysis, predictions, or trade recommendations.
+- Provider: GeckoTerminal keyless public Solana pool OHLCV API. Official
+  keyless/API and pool-OHLCV references were consulted 2026-07-12. No auth;
+  current public limits are dynamic IP throttling. Supported app intervals:
+  1m/5m/15m/1h. Provider pages are capped at 1,000 and service pagination at
+  10 pages; app ranges are capped at 3/14/30/180 days respectively.
+- Additive migration `20260712154023_historical_market_candles` adds
+  `HistoricalMarketBackfillRun`, `TokenMarketCandle`, and
+  `WalletEntryOutcome`. Candle uniqueness is token+pair+interval+open+source;
+  outcomes are unique by event+calculation version. Exact values are strings.
+- Pair identity comes only from the latest usable current snapshot. Re-fetches
+  update corrections idempotently; gaps remain missing (never invented,
+  interpolated, or forward-filled). HTTP calls occur outside transactions.
+- Manual backfill requires 1–5 explicit tokens, interval, start, and end; dev
+  tokens are excluded by default. Retry/backoff is bounded, Retry-After is
+  honored, permanent 4xx is not retried, and failures are isolated/audited.
+- Eligible confirmed/likely BUY outcomes use the first 1m candle at/after the
+  event and its open as an estimated entry. Version 1 computes 1m/5m/15m/30m/
+  1h/4h/24h returns plus 1h/24h extrema and time-to-max using only post-event
+  candles. Missing coverage produces PARTIAL/UNAVAILABLE; confidence follows
+  completion and entry-delay rules. WalletEvent is never changed.
+- API routes: historical backfill/candles/coverage/run audit and outcome
+  calculate/list/by-event. Overview reports candle and outcome totals.
+- UI: Tokens has bounded controls and coverage (including gaps); Activity has
+  a collapsed eligible-BUY-only outcome panel; Overview has historical totals.
+  Simple Mode explains approximation/warnings; Quant Mode preserves decimals.
+- Verification: shared 22, API 176, web 55 = **253 tests**; lint and production
+  build pass. All five frontend routes were served locally; behavioral rendering
+  is jsdom-tested (no automated browser screenshots).
+- Manual bounded sample: exactly 2 real non-development tokens, `1m`,
+  2026-07-10 20:00Z → 2026-07-11 22:00Z (26 hours). GeckoTerminal returned 255
+  candles and 1,977 omitted intervals, so both series correctly reported
+  PARTIAL. Exactly 2 eligible BUY events were calculated, both PARTIAL
+  (MEDIUM/LOW). One entry candle was compared directly with GeckoTerminal at
+  Unix 1783719840: open/high/low/close/volume matched exact stored strings.
+  Final database: 1024 wallets, 86 events, 65 tokens, 1 sync state, 2 current
+  snapshots, 1 current refresh run, 255 candles, 1 backfill run, 2 outcomes.
+- Known limits: keyless availability/rate limits are not production SLAs;
+  provider tracking can begin after pool creation; inactive intervals are
+  omitted; candle entry is not execution price; no scheduler/chart/ranking.
+  Provider credentials/raw responses never reach the frontend.
+
+## Exact next checkpoint
+
+**Phase 2A — Wallet trade reconstruction, position matching,
+realized/unrealized outcome foundations, and bankroll-aware wallet profiles.**
+Do not begin it implicitly.

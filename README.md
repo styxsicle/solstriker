@@ -1,7 +1,7 @@
 # Memecoin Lab
 
 A **local** Solana memecoin research and paper-trading application, built in small
-checkpoints. Current checkpoint: **Phase 1D-B1 — current token market snapshots**
+checkpoints. Current checkpoint: **Phase 1D-B2 — historical OHLCV and entry outcomes**
 (1A: foundation + wallet import; 1B: historical activity ingestion;
 1C: reliable swap decoding; 1D-A: beginner-friendly UI shell).
 
@@ -41,6 +41,8 @@ npm run build              # production build of shared, api, and web
 | `API_PORT`          | Backend port (default 3001)                        | No                   |
 | `WEB_ORIGIN`        | Allowed CORS origin for the dashboard              | No                   |
 | `VITE_API_BASE_URL` | API base URL used by the dashboard (no secrets)    | Yes                  |
+| `MARKET_DATA_PROVIDER` | Current snapshots: `dexscreener` or `none`    | No                   |
+| `HISTORICAL_MARKET_PROVIDER` | OHLCV: `geckoterminal` or `none`       | No                   |
 
 The RPC URL and key never leave the backend. `/api/rpc/status` returns only sanitized
 fields (`configured`, `healthy`, `slot`, `latencyMs`); RPC failures are reduced to a
@@ -183,6 +185,52 @@ confidence, selection reason, observed/fetched times, and age.
 
 This is historical/point-in-time research data only. The app produces **no
 predictions, scores, safety ratings, or buy/sell recommendations**.
+
+## Historical candles and entry outcomes (Phase 1D-B2)
+
+The Tokens page can manually backfill OHLCV for **1–5 explicitly selected
+non-development tokens** (start with 1–2). Historical identity is the exact
+Solana pair selected by the token's latest usable current-market snapshot; pools
+are never combined or silently switched. Supported stored intervals are `1m`,
+`5m`, `15m`, and `1h`. Requests are date-bounded, paginated to at most 10 ×
+1,000 provider rows per token, retried only for transient failures, and isolated
+per token. There is no startup job, polling, backfill-all, interpolation, or
+forward-fill. Re-fetches upsert corrected candles and the database uniqueness
+rule prevents duplicates. Missing trading intervals remain explicit gaps.
+
+The provider is GeckoTerminal's keyless public API at
+`api.geckoterminal.com/api/v2`, using the Solana pool-address OHLCV endpoint.
+No authentication is required. Official [keyless API documentation](https://docs.coingecko.com/docs/keyless-public-api)
+and [pool OHLCV reference](https://docs.coingecko.com/reference/pool-ohlcv-contract-address)
+were consulted on **2026-07-12**. The public rate limit is dynamic IP-based
+throttling (handle `429` with backoff), not a guaranteed fixed request rate.
+Each response is limited to 1,000 candles; provider availability starts when a
+pool began being tracked, and empty responses/gaps are possible. The app's own
+interval range caps are 3 days (`1m`), 14 days (`5m`), 30 days (`15m`), and
+180 days (`1h`). Set `HISTORICAL_MARKET_PROVIDER=none` to disable collection;
+the app still boots and stored history remains readable.
+
+`POST /api/historical-market/backfill` performs bounded collection;
+`GET /api/historical-market/candles`, `GET /api/historical-market/:mint/coverage`,
+and `GET /api/historical-market/backfill-runs/:id` expose normalized stored data
+and audit totals. Outcome routes are `POST /api/wallet-entry-outcomes/calculate`,
+`GET /api/wallet-entry-outcomes`, and
+`GET /api/wallet-entry-outcomes/:walletEventId`.
+
+Only confirmed/likely BUY events are eligible. Entry is estimated from the open
+of the first stored 1-minute candle at or after the event, with event-to-candle
+delay recorded. Returns use `(window price / estimated entry price − 1) × 100`;
+max gain/downside use the highest/lowest observed candle price through 1h or 24h.
+All selection is event-forward—future candles never choose a better entry or
+pair—and missing windows stay null. `COMPLETE` requires every requested window
+and horizon coverage with no gaps; otherwise results are `PARTIAL`,
+`UNAVAILABLE`, or `ERROR`; confidence follows completion and entry-delay rules.
+Calculation version 1 is idempotent.
+
+Simple Mode labels the estimate and warning in plain language. Quant Mode shows
+exact decimal strings, pair/interval, every window, coverage, version, and
+calculation time. These are selected-pair market observations, not wallet PnL,
+guaranteed fills, fees, slippage, or available exits.
 
 ## Development seed data
 

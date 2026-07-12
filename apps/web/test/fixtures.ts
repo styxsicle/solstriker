@@ -1,5 +1,5 @@
 // Synthetic test data only — never real wallet addresses or signatures.
-import type { ActivityEvent, MarketSnapshot, Token } from '../src/api';
+import type { ActivityEvent, MarketSnapshot, Token, WalletEntryOutcome } from '../src/api';
 
 export const FAKE_WALLET = {
   address: 'FAKEwa11etAddressForTests11111111111111111',
@@ -100,6 +100,52 @@ export function makeToken(overrides: Partial<Token> = {}): Token {
     discoveredAt: '2026-07-10T00:00:00.000Z',
     lastSeenAt: '2026-07-11T00:00:00.000Z',
     market: null,
+    ...overrides,
+  };
+}
+
+export function makeOutcome(overrides: Partial<WalletEntryOutcome> = {}): WalletEntryOutcome {
+  return {
+    id: 'outcome-1',
+    walletEventId: 'evt-1',
+    tokenId: 'token-1',
+    pairAddress: 'FAKEpairAddress1111111111111111111111111111',
+    entryTime: '2026-07-10T21:43:50.000Z',
+    entryPriceUsd: '0.000004000123456789',
+    entryPriceMethod: 'CANDLE_OPEN',
+    entryCandleTime: '2026-07-10T21:44:00.000Z',
+    entryDelaySeconds: 10,
+    price1mUsd: '0.0000041',
+    price5mUsd: '0.0000044',
+    price15mUsd: '0.0000038',
+    price30mUsd: '0.0000048',
+    price1hUsd: '0.000005',
+    price4hUsd: '0.0000036',
+    price24hUsd: '0.000006',
+    return1mPct: '2.496837890625',
+    return5mPct: '9.996606354413',
+    return15mPct: '-5.002930801441',
+    return30mPct: '19.996296410263',
+    return1hPct: '24.996142095527',
+    return4hPct: '-10.002776853472',
+    return24hPct: '49.995370514632',
+    maxPrice1hUsd: '0.0000052',
+    minPrice1hUsd: '0.0000035',
+    maxReturn1hPct: '29.995987841003',
+    maxDrawdown1hPct: '-12.502700532777',
+    timeToMax1hSeconds: 1810,
+    maxPrice24hUsd: '0.0000062',
+    minPrice24hUsd: '0.0000032',
+    maxReturn24hPct: '54.995216260157',
+    maxDrawdown24hPct: '-20.002469059009',
+    timeToMax24hSeconds: 7200,
+    status: 'COMPLETE',
+    confidence: 'HIGH',
+    coverageStart: '2026-07-10T21:44:00.000Z',
+    coverageEnd: '2026-07-11T21:44:00.000Z',
+    missingWindowCount: 0,
+    calculationVersion: 1,
+    calculatedAt: '2026-07-12T00:00:00.000Z',
     ...overrides,
   };
 }

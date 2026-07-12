@@ -107,14 +107,15 @@ signing, and real trades.
   Quant Mode exact-decimal technical table, selection controls; Overview market
   cards. No recommendations, scores, or predictions.
 
-### ⏭ Phase 1D-B2 — Historical OHLCV and post-entry outcomes (next)
+### ✅ Phase 1D-B2 — Historical OHLCV and post-entry outcomes
 
 - Historical OHLCV candle collection and bounded backfilling
 - Post-wallet-entry market outcomes (price after a tracked wallet's entry)
-- Periodic/scheduled snapshotting (out of scope for 1D-B1's manual model)
-- Stage classification rules (`FINAL_STRETCH`, `MIGRATED`)
+- Manual bounded backfill only; scheduled collection remains intentionally out of scope
+- Versioned, no-look-ahead BUY-entry outcome calculation and coverage UI
+- Additive migration `20260712154023_historical_market_candles`
 
-### Phase 2 — Wallet ranking
+### ⏭ Phase 2A — Wallet trade reconstruction, position matching, realized/unrealized outcome foundations, and bankroll-aware wallet profiles
 
 - Per-wallet historical PnL and hit-rate from recorded events
 - Ranking views; no predictions

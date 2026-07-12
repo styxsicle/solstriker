@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { intervalSeconds, isSupportedInterval } from './intervals.js';
 
 export interface TokenCoverage {
   pairAddress: string | null;
@@ -38,20 +39,33 @@ export async function tokenCoverage(
   }
 
   const where = { tokenId, pairAddress: latest.pairAddress, interval: latest.interval };
-  const [count, earliest, newest] = await Promise.all([
-    prisma.tokenMarketCandle.count({ where }),
-    prisma.tokenMarketCandle.findFirst({ where, orderBy: { openTime: 'asc' }, select: { openTime: true } }),
+  const [openTimes, newest] = await Promise.all([
+    prisma.tokenMarketCandle.findMany({
+      where,
+      orderBy: { openTime: 'asc' },
+      select: { openTime: true },
+    }),
     prisma.tokenMarketCandle.findFirst({ where, orderBy: { openTime: 'desc' }, select: { openTime: true } }),
   ]);
+  const duration = isSupportedInterval(latest.interval)
+    ? intervalSeconds(latest.interval) * 1000
+    : null;
+  let gapCount = 0;
+  if (duration !== null) {
+    for (let i = 1; i < openTimes.length; i++) {
+      const elapsed = openTimes[i].openTime.getTime() - openTimes[i - 1].openTime.getTime();
+      if (elapsed > duration) gapCount += Math.floor(elapsed / duration) - 1;
+    }
+  }
 
   return {
     pairAddress: latest.pairAddress,
     interval: latest.interval,
-    earliestCandle: earliest?.openTime.toISOString() ?? null,
+    earliestCandle: openTimes[0]?.openTime.toISOString() ?? null,
     latestCandle: newest?.openTime.toISOString() ?? null,
-    candleCount: count,
-    gapCount: 0, // interior gaps are reported per backfill run; not recomputed here
+    candleCount: openTimes.length,
+    gapCount,
     lastBackfillAt: latest.fetchedAt.toISOString(),
-    status: count > 0 ? 'COVERED' : 'NONE',
+    status: openTimes.length === 0 ? 'NONE' : gapCount > 0 ? 'PARTIAL' : 'COVERED',
   };
 }

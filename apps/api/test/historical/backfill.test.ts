@@ -148,6 +148,11 @@ describe('POST /api/historical-market/backfill', () => {
     expect(body.gapCount).toBe(1);
     expect(body.results[0].status).toBe('PARTIAL');
     expect(await ctx.prisma.tokenMarketCandle.count()).toBe(10); // gap not filled
+    const coverage = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/historical-market/${MINT}/coverage`,
+    });
+    expect(coverage.json().coverage).toMatchObject({ gapCount: 1, status: 'PARTIAL' });
   });
 
   it('isolates a provider failure per token and releases the lock', async () => {
@@ -171,7 +176,7 @@ describe('POST /api/historical-market/backfill', () => {
     const runId = run.json().runId;
 
     const coverage = await ctx.app.inject({ method: 'GET', url: `/api/historical-market/${MINT}/coverage` });
-    expect(coverage.json().coverage).toMatchObject({ candleCount: 11, status: 'COVERED', pairAddress: PAIR_A, interval: '1m' });
+    expect(coverage.json().coverage).toMatchObject({ candleCount: 11, gapCount: 0, status: 'COVERED', pairAddress: PAIR_A, interval: '1m' });
 
     const candles = await ctx.app.inject({ method: 'GET', url: `/api/historical-market/candles?mint=${MINT}&interval=1m&pageSize=5` });
     expect(candles.json().total).toBe(11);

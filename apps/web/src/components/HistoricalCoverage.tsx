@@ -51,6 +51,7 @@ export function HistoricalCoverage({ mint }: { mint: string }) {
               <Field label="Pair" value={coverage.pairAddress ? shortAddr(coverage.pairAddress) : '—'} />
               <Field label="Interval" value={coverage.interval ?? '—'} />
               <Field label="Candles" value={coverage.candleCount.toLocaleString()} />
+              <Field label="Gaps" value={coverage.gapCount.toLocaleString()} />
               <Field label="Earliest" value={formatTime(coverage.earliestCandle)} />
               <Field label="Latest" value={formatTime(coverage.latestCandle)} />
               <Field label="Last backfill" value={formatTime(coverage.lastBackfillAt)} />
