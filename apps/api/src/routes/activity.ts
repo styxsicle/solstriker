@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import {
+  DECODER_VERSION,
   DEFAULT_TX_PER_SYNC,
   MAX_TX_PER_SYNC,
   MAX_WALLETS_PER_SYNC,
@@ -117,6 +118,34 @@ export function registerActivityRoutes(app: FastifyInstance, deps: ActivityRoute
         lastSyncAt: s.lastSyncAt?.toISOString() ?? null,
         lastError: s.lastError,
       })),
+    };
+  });
+
+  // Read-only counts over stored activity. No quality/performance metrics —
+  // just what has been checked, found, and how confidently it was decoded.
+  app.get('/api/activity/summary', async () => {
+    const [byType, byConfidence, legacyEvents, eventsStored, txAggregate] = await Promise.all([
+      prisma.walletEvent.groupBy({ by: ['eventType'], _count: { _all: true } }),
+      prisma.walletEvent.groupBy({ by: ['confidence'], _count: { _all: true } }),
+      prisma.walletEvent.count({ where: { decoderVersion: { lt: DECODER_VERSION } } }),
+      prisma.walletEvent.count(),
+      prisma.walletSyncState.aggregate({ _sum: { totalTransactions: true } }),
+    ]);
+    const typeCount = (type: string) =>
+      byType.find((row) => row.eventType === type)?._count._all ?? 0;
+    const confidenceCount = (confidence: string) =>
+      byConfidence.find((row) => row.confidence === confidence)?._count._all ?? 0;
+    return {
+      transactionsChecked: txAggregate._sum.totalTransactions ?? 0,
+      eventsStored,
+      buys: typeCount('BUY'),
+      sells: typeCount('SELL'),
+      transfersIn: typeCount('TOKEN_TRANSFER_IN'),
+      transfersOut: typeCount('TOKEN_TRANSFER_OUT'),
+      confirmed: confidenceCount('CONFIRMED'),
+      likely: confidenceCount('LIKELY'),
+      unknownConfidence: confidenceCount('UNKNOWN'),
+      legacyEvents,
     };
   });
 

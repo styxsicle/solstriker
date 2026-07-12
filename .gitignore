@@ -23,3 +23,30 @@ prisma/test.db-journal
 *wallet-export*
 *tracked-wallets*
 *tracked wallets*
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local databases
+prisma/dev.db
+prisma/dev.db-*
+*.db
+*.sqlite
+*.sqlite3
+
+# Private wallet research
+private/
+wallet-exports/
+*wallet*export*.json
+*wallet*export*.csv
+
+# Generated files
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store

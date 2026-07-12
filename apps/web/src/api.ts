@@ -50,6 +50,57 @@ export interface ImportSummary {
   invalidSamples: { line: number; value: string; reason: string }[];
 }
 
+export type Freshness = 'FRESH' | 'AGING' | 'STALE' | 'NEVER_FETCHED' | 'UNKNOWN';
+export type SnapshotStatus = 'COMPLETE' | 'PARTIAL' | 'NOT_FOUND' | 'ERROR';
+export type MarketConfidence = 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
+
+/**
+ * Current market snapshot. All financial values are EXACT DECIMAL STRINGS
+ * (never converted to lossy JS numbers) — null means the provider did not
+ * report the value; it is never zero.
+ */
+export interface MarketSnapshot {
+  id: string;
+  tokenId: string;
+  refreshRunId: string;
+  observedAt: string;
+  fetchedAt: string;
+  ageSeconds: number | null;
+  freshness: Freshness;
+  priceUsd: string | null;
+  priceSol: string | null;
+  marketCapUsd: string | null;
+  fdvUsd: string | null;
+  liquidityUsd: string | null;
+  volume5mUsd: string | null;
+  volume1hUsd: string | null;
+  volume6hUsd: string | null;
+  volume24hUsd: string | null;
+  buys5m: number | null;
+  sells5m: number | null;
+  buys1h: number | null;
+  sells1h: number | null;
+  buys6h: number | null;
+  sells6h: number | null;
+  buys24h: number | null;
+  sells24h: number | null;
+  priceChange5mPct: string | null;
+  priceChange1hPct: string | null;
+  priceChange6hPct: string | null;
+  priceChange24hPct: string | null;
+  pairAddress: string | null;
+  dex: string | null;
+  baseMint: string | null;
+  quoteMint: string | null;
+  tokenName: string | null;
+  tokenSymbol: string | null;
+  source: string;
+  status: SnapshotStatus;
+  confidence: MarketConfidence;
+  selectionReason: string | null;
+  sanitizedErrorCode: string | null;
+}
+
 export interface Token {
   id: string;
   mintAddress: string;
@@ -59,12 +110,40 @@ export interface Token {
   source: string;
   discoveredAt: string;
   lastSeenAt: string;
+  /** Present only when the tokens list was requested withMarket=true. */
+  market?: MarketSnapshot | null;
 }
 
 export interface TokenListResponse {
   items: Token[];
   total: number;
   liveDiscovery: boolean;
+}
+
+export interface RefreshTokenResult {
+  tokenId: string;
+  mint: string;
+  status: SnapshotStatus;
+  confidence: MarketConfidence;
+  pairAddress: string | null;
+  dex: string | null;
+  observedAt: string;
+  sanitizedErrorCode: string | null;
+}
+
+export interface RefreshRunResult {
+  runId: string;
+  provider: string;
+  status: 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED';
+  requested: number;
+  processed: number;
+  complete: number;
+  partial: number;
+  notFound: number;
+  failed: number;
+  snapshotsInserted: number;
+  duplicatesPrevented: number;
+  results: RefreshTokenResult[];
 }
 
 export interface SyncResult {
@@ -141,6 +220,142 @@ export interface ActivityEventsResponse {
   page: number;
   pageSize: number;
   total: number;
+}
+
+export interface OverviewResponse {
+  wallets: { total: number; enabled: number; dev: number };
+  activity: { syncedWallets: number; storedEvents: number };
+  tokens: { total: number; dev: number };
+  market: {
+    nonDevTokens: number;
+    withSnapshots: number;
+    neverRefreshed: number;
+    fresh: number;
+    aging: number;
+    stale: number;
+    partialLatest: number;
+    lastSuccessfulRefreshAt: string | null;
+    lastRunStatus: string | null;
+  };
+  historical: {
+    tokensWithCandles: number;
+    totalCandles: number;
+    earliestCandle: string | null;
+    latestCandle: string | null;
+    lastBackfillStatus: string | null;
+    lastBackfillAt: string | null;
+    eligibleBuyEvents: number;
+    buysWithCompleteOutcome: number;
+    buysWithPartialOutcome: number;
+    buysWithoutOutcome: number;
+  };
+}
+
+// --- Phase 1D-B2: historical candles + post-entry outcomes ---
+
+export interface TokenCandleCoverage {
+  pairAddress: string | null;
+  interval: string | null;
+  earliestCandle: string | null;
+  latestCandle: string | null;
+  candleCount: number;
+  gapCount: number;
+  lastBackfillAt: string | null;
+  status: 'NONE' | 'PARTIAL' | 'COVERED';
+}
+
+export interface BackfillTokenResult {
+  tokenId: string;
+  mint: string;
+  pairAddress: string | null;
+  status: 'COMPLETE' | 'PARTIAL' | 'NOT_FOUND' | 'ERROR';
+  candlesInserted: number;
+  candlesUpdated: number;
+  duplicatesPrevented: number;
+  gapCount: number;
+  coverageStart: string | null;
+  coverageEnd: string | null;
+  sanitizedErrorCode: string | null;
+  reason: string | null;
+}
+
+export interface BackfillRunResult {
+  runId: string;
+  provider: string;
+  status: 'COMPLETED' | 'PARTIAL' | 'FAILED';
+  interval: string;
+  requestedStart: string;
+  requestedEnd: string;
+  requested: number;
+  processed: number;
+  complete: number;
+  partial: number;
+  notFound: number;
+  failed: number;
+  candlesInserted: number;
+  candlesUpdated: number;
+  duplicatesPrevented: number;
+  gapCount: number;
+  results: BackfillTokenResult[];
+}
+
+export type OutcomeStatus = 'COMPLETE' | 'PARTIAL' | 'UNAVAILABLE' | 'ERROR';
+
+/** Post-entry outcome. All prices/returns are EXACT DECIMAL STRINGS or null. */
+export interface WalletEntryOutcome {
+  id: string;
+  walletEventId: string;
+  tokenId: string;
+  pairAddress: string | null;
+  entryTime: string;
+  entryPriceUsd: string | null;
+  entryPriceMethod: string;
+  entryCandleTime: string | null;
+  entryDelaySeconds: number | null;
+  price1mUsd: string | null;
+  price5mUsd: string | null;
+  price15mUsd: string | null;
+  price30mUsd: string | null;
+  price1hUsd: string | null;
+  price4hUsd: string | null;
+  price24hUsd: string | null;
+  return1mPct: string | null;
+  return5mPct: string | null;
+  return15mPct: string | null;
+  return30mPct: string | null;
+  return1hPct: string | null;
+  return4hPct: string | null;
+  return24hPct: string | null;
+  maxPrice1hUsd: string | null;
+  minPrice1hUsd: string | null;
+  maxReturn1hPct: string | null;
+  maxDrawdown1hPct: string | null;
+  timeToMax1hSeconds: number | null;
+  maxPrice24hUsd: string | null;
+  minPrice24hUsd: string | null;
+  maxReturn24hPct: string | null;
+  maxDrawdown24hPct: string | null;
+  timeToMax24hSeconds: number | null;
+  status: OutcomeStatus;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
+  coverageStart: string | null;
+  coverageEnd: string | null;
+  missingWindowCount: number;
+  calculationVersion: number;
+  calculatedAt: string;
+}
+
+export interface ActivitySummary {
+  transactionsChecked: number;
+  eventsStored: number;
+  buys: number;
+  sells: number;
+  transfersIn: number;
+  transfersOut: number;
+  confirmed: number;
+  likely: number;
+  unknownConfidence: number;
+  legacyEvents: number;
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {

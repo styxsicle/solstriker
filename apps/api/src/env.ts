@@ -26,6 +26,12 @@ const envSchema = z.object({
   DATABASE_URL: z.string().default('file:./dev.db'),
   API_PORT: z.coerce.number().int().min(0).default(3001),
   WEB_ORIGIN: z.string().default('http://localhost:5173'),
+  // Market-data provider name (Phase 1D-B1). 'dexscreener' (default) needs no
+  // credential; 'none' disables market lookups. Backend-only — never VITE_*.
+  MARKET_DATA_PROVIDER: z.string().default('dexscreener'),
+  // Historical OHLCV provider (Phase 1D-B2). 'geckoterminal' (default) needs no
+  // credential; 'none' disables candle backfilling. Backend-only — never VITE_*.
+  HISTORICAL_MARKET_PROVIDER: z.string().default('geckoterminal'),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

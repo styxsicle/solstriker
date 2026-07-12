@@ -47,9 +47,95 @@ model Token {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  events WalletEvent[]
+  events          WalletEvent[]
+  marketSnapshots TokenMarketSnapshot[]
+  candles         TokenMarketCandle[]
+  entryOutcomes   WalletEntryOutcome[]
 
   @@index([stage])
+}
+
+// One manual market-data refresh request (auditable batch).
+// status: RUNNING | COMPLETED | PARTIAL | FAILED
+model TokenMarketRefreshRun {
+  id                    String    @id @default(cuid())
+  provider              String
+  status                String    @default("RUNNING")
+  startedAt             DateTime  @default(now())
+  completedAt           DateTime?
+  requestedCount        Int       @default(0)
+  processedCount        Int       @default(0)
+  completeCount         Int       @default(0)
+  partialCount          Int       @default(0)
+  notFoundCount         Int       @default(0)
+  errorCount            Int       @default(0)
+  snapshotCount         Int       @default(0)
+  sanitizedErrorSummary String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  snapshots TokenMarketSnapshot[]
+
+  @@index([startedAt])
+}
+
+// One market observation of one token within one refresh run.
+// Financial values are stored as exact decimal STRINGS: SQLite (this project's
+// datastore) has no Decimal type, and strings preserve the provider's exact
+// numbers without float loss. Unknown values are NULL — never zero.
+// status: COMPLETE | PARTIAL | NOT_FOUND | ERROR
+// confidence: HIGH | MEDIUM | LOW | UNKNOWN
+model TokenMarketSnapshot {
+  id                 String   @id @default(cuid())
+  tokenId            String
+  refreshRunId       String
+  observedAt         DateTime // provider observation time (= fetchedAt for providers without one)
+  fetchedAt          DateTime @default(now())
+  priceUsd           String?
+  priceSol           String? // only when the selected pair is SOL-quoted (priceNative)
+  marketCapUsd       String? // circulating estimate — NEVER substituted with FDV
+  fdvUsd             String? // fully-diluted estimate — kept strictly separate
+  liquidityUsd       String?
+  volume5mUsd        String?
+  volume1hUsd        String?
+  volume6hUsd        String?
+  volume24hUsd       String?
+  buys5m             Int?
+  sells5m            Int?
+  buys1h             Int?
+  sells1h            Int?
+  buys6h             Int?
+  sells6h            Int?
+  buys24h            Int?
+  sells24h           Int?
+  priceChange5mPct   String?
+  priceChange1hPct   String?
+  priceChange6hPct   String?
+  priceChange24hPct  String?
+  pairAddress        String?
+  dex                String?
+  baseMint           String?
+  quoteMint          String?
+  tokenName          String?
+  tokenSymbol        String?
+  source             String
+  status             String
+  confidence         String   @default("UNKNOWN")
+  selectionReason    String?
+  sanitizedErrorCode String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  token      Token                 @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  refreshRun TokenMarketRefreshRun @relation(fields: [refreshRunId], references: [id], onDelete: Cascade)
+
+  @@unique([refreshRunId, tokenId]) // one auditable result per token per run
+  @@index([tokenId, observedAt])
+  @@index([tokenId, fetchedAt])
+  @@index([refreshRunId])
+  @@index([source])
+  @@index([status])
+  @@index([observedAt])
 }
 
 // One normalized buy/sell/transfer leg of a transaction, from the perspective
@@ -72,26 +158,27 @@ model WalletEvent {
   createdAt   DateTime  @default(now())
 
   // --- Phase 1C reliable swap decoding (all additive, nullable) ---
-  venue          String? // actual execution venue(s) when decoded, e.g. PUMP_AMM, RAYDIUM
-  confidence     String? // CONFIRMED | LIKELY | UNKNOWN
-  explanation    String? // human-readable reason for the classification
-  swapInMint     String? // exact decoded swap input leg
-  swapInAmount   Float?
-  swapOutMint    String? // exact decoded swap output leg
-  swapOutAmount  Float?
+  venue           String? // actual execution venue(s) when decoded, e.g. PUMP_AMM, RAYDIUM
+  confidence      String? // CONFIRMED | LIKELY | UNKNOWN
+  explanation     String? // human-readable reason for the classification
+  swapInMint      String? // exact decoded swap input leg
+  swapInAmount    Float?
+  swapOutMint     String? // exact decoded swap output leg
+  swapOutAmount   Float?
   walletSolChange Float? // exact total wallet SOL balance change (signed)
-  networkFeeSol  Float?
-  priorityFeeSol Float? // identifiable portion above base fee (1-signature assumption)
-  platformFeeSol Float?
-  tipSol         Float?
-  rentSol        Float? // token-account creation / rent-exempt deposits paid
-  unrelatedSolIn Float?
+  networkFeeSol   Float?
+  priorityFeeSol  Float? // identifiable portion above base fee (1-signature assumption)
+  platformFeeSol  Float?
+  tipSol          Float?
+  rentSol         Float? // token-account creation / rent-exempt deposits paid
+  unrelatedSolIn  Float?
   unrelatedSolOut Float?
   unattributedSol Float? // reconciliation residue (signed)
-  decoderVersion Int     @default(1) // 1 = legacy heuristic, 2 = Phase 1C decoder
+  decoderVersion  Int     @default(1) // 1 = legacy heuristic, 2 = Phase 1C decoder
 
-  wallet TrackedWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  token  Token?        @relation(fields: [tokenId], references: [id])
+  wallet   TrackedWallet        @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  token    Token?               @relation(fields: [tokenId], references: [id])
+  outcomes WalletEntryOutcome[]
 
   @@index([walletId, blockTime])
   @@index([tokenId])
@@ -117,4 +204,132 @@ model WalletSyncState {
   updatedAt         DateTime  @updatedAt
 
   wallet TrackedWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1D-B2 — historical OHLCV candles and post-wallet-entry outcomes.
+// All financial values are exact decimal STRINGS (SQLite has no Decimal type);
+// unknown values are NULL, never zero. Timestamps are stored UTC.
+// ---------------------------------------------------------------------------
+
+// One manual, bounded historical-candle backfill request (auditable batch).
+// status: RUNNING | COMPLETED | PARTIAL | FAILED
+model HistoricalMarketBackfillRun {
+  id                    String    @id @default(cuid())
+  provider              String
+  status                String    @default("RUNNING")
+  startedAt             DateTime  @default(now())
+  completedAt           DateTime?
+  requestedTokenCount   Int       @default(0)
+  processedTokenCount   Int       @default(0)
+  requestedInterval     String
+  requestedStart        DateTime
+  requestedEnd          DateTime
+  candlesInserted       Int       @default(0)
+  candlesUpdated        Int       @default(0)
+  duplicatesPrevented   Int       @default(0)
+  gapCount              Int       @default(0)
+  completeCount         Int       @default(0)
+  partialCount          Int       @default(0)
+  notFoundCount         Int       @default(0)
+  errorCount            Int       @default(0)
+  sanitizedErrorSummary String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  candles TokenMarketCandle[]
+
+  @@index([startedAt])
+}
+
+// One OHLCV candle for one pair at one interval. openTime is the candle's
+// start (UTC); closeTime = openTime + interval duration. Gaps are NOT stored
+// (no manufactured/zero candles). Uniqueness prevents duplicates on re-fetch;
+// an existing candle may be updated if the provider returns corrected values.
+model TokenMarketCandle {
+  id            String   @id @default(cuid())
+  tokenId       String
+  pairAddress   String
+  interval      String // e.g. "1m", "5m", "15m", "1h"
+  openTime      DateTime
+  closeTime     DateTime
+  open          String
+  high          String
+  low           String
+  close         String
+  volumeUsd     String? // null when the provider did not report volume
+  source        String
+  fetchedAt     DateTime @default(now())
+  backfillRunId String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  token       Token                       @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  backfillRun HistoricalMarketBackfillRun @relation(fields: [backfillRunId], references: [id], onDelete: Cascade)
+
+  @@unique([tokenId, pairAddress, interval, openTime, source])
+  @@index([tokenId, openTime])
+  @@index([pairAddress, openTime])
+  @@index([interval, openTime])
+  @@index([backfillRunId])
+  @@index([source])
+  @@index([openTime])
+}
+
+// Historical market outcome of one BUY WalletEvent, derived only from stored
+// candles AFTER the event time (no look-ahead). Never modifies the WalletEvent.
+// entryPriceMethod: EXACT_SNAPSHOT | CANDLE_OPEN | CANDLE_CLOSE | CANDLE_INTERPOLATED | UNAVAILABLE
+// status: COMPLETE | PARTIAL | UNAVAILABLE | ERROR
+// confidence: HIGH | MEDIUM | LOW | UNKNOWN
+model WalletEntryOutcome {
+  id                  String    @id @default(cuid())
+  walletEventId       String
+  tokenId             String
+  pairAddress         String?
+  entryTime           DateTime
+  entryPriceUsd       String?
+  entryPriceMethod    String
+  entryCandleTime     DateTime?
+  entryDelaySeconds   Int?
+  price1mUsd          String?
+  price5mUsd          String?
+  price15mUsd         String?
+  price30mUsd         String?
+  price1hUsd          String?
+  price4hUsd          String?
+  price24hUsd         String?
+  return1mPct         String?
+  return5mPct         String?
+  return15mPct        String?
+  return30mPct        String?
+  return1hPct         String?
+  return4hPct         String?
+  return24hPct        String?
+  maxPrice1hUsd       String?
+  minPrice1hUsd       String?
+  maxReturn1hPct      String?
+  maxDrawdown1hPct    String?
+  timeToMax1hSeconds  Int?
+  maxPrice24hUsd      String?
+  minPrice24hUsd      String?
+  maxReturn24hPct     String?
+  maxDrawdown24hPct   String?
+  timeToMax24hSeconds Int?
+  status              String
+  confidence          String    @default("UNKNOWN")
+  coverageStart       DateTime?
+  coverageEnd         DateTime?
+  missingWindowCount  Int       @default(0)
+  calculationVersion  Int       @default(1)
+  calculatedAt        DateTime  @default(now())
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  walletEvent WalletEvent @relation(fields: [walletEventId], references: [id], onDelete: Cascade)
+  token       Token       @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@unique([walletEventId, calculationVersion])
+  @@index([tokenId])
+  @@index([status])
+  @@index([calculatedAt])
 }

@@ -2,79 +2,71 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   api,
   type ActivityEventsResponse,
+  type ActivitySummary,
   type SyncResponse,
   type SyncResult,
+  type SyncStatusItem,
   type SyncStatusResponse,
   type Wallet,
   type WalletListResponse,
 } from '../api';
+import { useMode } from '../lib/mode';
+import { formatTime, shortAddr } from '../lib/format';
+import { walletDisplayName } from '../lib/wording';
+import { PageHeader } from '../components/PageHeader';
+import { EventList } from '../components/EventList';
+import { ConfirmResyncModal } from '../components/ConfirmResyncModal';
 
 const EVENT_TYPES = ['BUY', 'SELL', 'TOKEN_TRANSFER_IN', 'TOKEN_TRANSFER_OUT'] as const;
 const MAX_SELECTED = 10;
 const TX_CAP_CHOICES = [100, 200, 500];
 
-function shortAddr(address: string): string {
-  return `${address.slice(0, 4)}…${address.slice(-4)}`;
-}
-
-function typeClass(eventType: string): string {
-  if (eventType === 'BUY') return 'status-good';
-  if (eventType === 'SELL') return 'status-bad';
-  return 'status-muted';
-}
-
-function formatAmount(value: number | null): string {
-  if (value === null) return '—';
-  if (Math.abs(value) >= 1000) {
-    return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  }
-  return value.toLocaleString(undefined, { maximumFractionDigits: 4 });
-}
-
-function formatSol(value: number | null): string {
-  if (value === null) return '—';
-  return `${value.toLocaleString(undefined, { maximumFractionDigits: 9 })} SOL`;
-}
-
-function confidenceClass(confidence: string | null): string {
-  if (confidence === 'CONFIRMED') return 'status-good';
-  if (confidence === 'LIKELY') return 'status-warn';
-  return 'status-muted';
-}
-
-function hasUnattributed(value: number | null): boolean {
-  return value !== null && Math.abs(value) > 1e-9;
+function SummaryCard({ label, value, tone }: { label: string; value: number | undefined; tone?: string }) {
+  return (
+    <div className="card">
+      <div className="card-label">{label}</div>
+      <div className={`card-value ${tone ?? ''}`}>
+        {value === undefined ? <span className="skeleton" /> : value.toLocaleString()}
+      </div>
+    </div>
+  );
 }
 
 export function ActivityPage() {
+  const { mode } = useMode();
   const [error, setError] = useState<string | null>(null);
 
   // Wallet picker
   const [walletSearch, setWalletSearch] = useState('');
   const [candidates, setCandidates] = useState<Wallet[]>([]);
   const [selected, setSelected] = useState<Wallet[]>([]);
-  const [txCap, setTxCap] = useState(200);
+  const [txCap, setTxCap] = useState(100);
 
-  // Sync
+  // Sync + status + summary
   const [syncing, setSyncing] = useState(false);
   const [syncResults, setSyncResults] = useState<SyncResult[] | null>(null);
-
-  // Status + events
   const [status, setStatus] = useState<SyncStatusResponse | null>(null);
+  const [summary, setSummary] = useState<ActivitySummary | null>(null);
+  const [resyncTarget, setResyncTarget] = useState<SyncStatusItem | null>(null);
+  const [resyncBusy, setResyncBusy] = useState(false);
+
+  // Events
   const [events, setEvents] = useState<ActivityEventsResponse | null>(null);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [eventPage, setEventPage] = useState(1);
   const [typeFilter, setTypeFilter] = useState('');
   const [walletFilter, setWalletFilter] = useState('');
-  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
-  const [resyncingId, setResyncingId] = useState<string | null>(null);
 
   const loadCandidates = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ enabled: 'true', page: '1', pageSize: '25' });
+      const params = new URLSearchParams({
+        enabled: 'true',
+        includeDev: 'false',
+        page: '1',
+        pageSize: '25',
+      });
       if (walletSearch.trim()) params.set('search', walletSearch.trim());
-      const res = await api<WalletListResponse>(`/api/wallets?${params.toString()}`);
-      setCandidates(res.items);
+      setCandidates((await api<WalletListResponse>(`/api/wallets?${params.toString()}`)).items);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -82,7 +74,12 @@ export function ActivityPage() {
 
   const loadStatus = useCallback(async () => {
     try {
-      setStatus(await api<SyncStatusResponse>('/api/activity/status'));
+      const [s, sum] = await Promise.all([
+        api<SyncStatusResponse>('/api/activity/status'),
+        api<ActivitySummary>('/api/activity/summary'),
+      ]);
+      setStatus(s);
+      setSummary(sum);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -106,20 +103,16 @@ export function ActivityPage() {
   useEffect(() => {
     void loadCandidates();
   }, [loadCandidates]);
-
   useEffect(() => {
     void loadStatus();
   }, [loadStatus]);
-
   useEffect(() => {
     void loadEvents();
   }, [loadEvents]);
 
   function toggleSelect(wallet: Wallet) {
     setSelected((current) => {
-      if (current.some((w) => w.id === wallet.id)) {
-        return current.filter((w) => w.id !== wallet.id);
-      }
+      if (current.some((w) => w.id === wallet.id)) return current.filter((w) => w.id !== wallet.id);
       if (current.length >= MAX_SELECTED) return current;
       return [...current, wallet];
     });
@@ -133,10 +126,7 @@ export function ActivityPage() {
     try {
       const res = await api<SyncResponse>('/api/activity/sync', {
         method: 'POST',
-        body: JSON.stringify({
-          walletIds: selected.map((w) => w.id),
-          maxTransactions: txCap,
-        }),
+        body: JSON.stringify({ walletIds: selected.map((w) => w.id), maxTransactions: txCap }),
       });
       setSyncResults(res.results);
       await Promise.all([loadStatus(), loadEvents()]);
@@ -144,7 +134,7 @@ export function ActivityPage() {
       const message = (e as Error).message;
       setError(
         message === 'provider_not_configured'
-          ? 'No Helius API key configured — set HELIUS_API_KEY in .env to enable activity sync.'
+          ? 'No Helius API key is configured, so activity cannot be fetched. Add HELIUS_API_KEY to .env (backend only) and restart.'
           : message,
       );
     } finally {
@@ -152,124 +142,166 @@ export function ActivityPage() {
     }
   }
 
-  async function resyncWallet(walletId: string, label: string) {
-    const confirmed = window.confirm(
-      `Re-sync "${label}"? This clears this wallet's stored events and re-fetches its history with the current decoder. Other wallets are not affected.`,
-    );
-    if (!confirmed) return;
-    setResyncingId(walletId);
+  async function confirmResync() {
+    if (!resyncTarget) return;
+    setResyncBusy(true);
     setError(null);
     try {
       await api<SyncResponse>('/api/activity/resync', {
         method: 'POST',
-        body: JSON.stringify({ walletIds: [walletId], maxTransactions: txCap }),
+        body: JSON.stringify({ walletIds: [resyncTarget.walletId], maxTransactions: txCap }),
       });
+      setResyncTarget(null);
       await Promise.all([loadStatus(), loadEvents()]);
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setResyncingId(null);
+      setResyncBusy(false);
     }
   }
 
   const providerConfigured = status?.providerConfigured ?? true;
-  const labelFor = (w: { label: string | null; emoji: string | null; address: string }) =>
-    `${w.emoji ? `${w.emoji} ` : ''}${w.label ?? shortAddr(w.address)}`;
 
   return (
     <div>
-      <div className="notice">
-        Historical, read-only sync. Select up to <strong>{MAX_SELECTED} wallets per run</strong>{' '}
-        (start with 1–5) — with 1,000+ tracked wallets, bulk syncing is deliberately not
-        supported in this phase. Live monitoring is a later phase.
-      </div>
+      <PageHeader
+        title="Wallet activity"
+        subtitle={
+          mode === 'simple'
+            ? 'Download and read the historical trades of the wallets you track. Nothing here is live — you choose when to fetch.'
+            : 'Historical sync + decoded event stream. Max 10 wallets per request, 500 tx per wallet per run.'
+        }
+      />
 
-      {!providerConfigured && (
-        <div className="error-box">
-          Activity sync is unavailable: no Helius API key is configured. Add{' '}
-          <code>HELIUS_API_KEY</code> to the root <code>.env</code> (backend only) and restart.
-        </div>
+      {error && (
+        <p className="notice danger" role="alert">
+          {error}
+        </p>
       )}
-      {error && <div className="error-box">Error: {error}</div>}
+      {!providerConfigured && (
+        <p className="notice warn" role="note">
+          Activity sync is unavailable: no Helius API key is configured. Existing stored activity
+          is still shown below.
+        </p>
+      )}
 
-      <div className="panel">
-        <h2>Select wallets to sync</h2>
-        <div className="toolbar">
-          <input
-            type="text"
-            placeholder="Search enabled wallets…"
-            value={walletSearch}
-            onChange={(e) => setWalletSearch(e.target.value)}
-            style={{ minWidth: 260 }}
+      <section className="panel" aria-labelledby="activity-summary">
+        <h2 id="activity-summary">Stored activity so far</h2>
+        <div className="cards" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+          <SummaryCard label="Transactions checked" value={summary?.transactionsChecked} />
+          <SummaryCard label="Events found" value={summary?.eventsStored} />
+          <SummaryCard label="Buys" value={summary?.buys} tone="status-good" />
+          <SummaryCard label="Sells" value={summary?.sells} tone="status-bad" />
+          <SummaryCard
+            label="Transfers"
+            value={summary ? summary.transfersIn + summary.transfersOut : undefined}
           />
-          <span className="hint" style={{ margin: 0 }}>
+          <SummaryCard label="Unknown events" value={summary?.unknownConfidence} />
+          <SummaryCard label="Confirmed" value={summary?.confirmed} tone="status-good" />
+          <SummaryCard label="Likely" value={summary?.likely} tone="status-warn" />
+          <SummaryCard
+            label="Need re-sync (old decoder)"
+            value={summary?.legacyEvents}
+            tone={summary && summary.legacyEvents > 0 ? 'status-warn' : ''}
+          />
+        </div>
+      </section>
+
+      <section className="panel" aria-labelledby="activity-sync">
+        <h2 id="activity-sync">Fetch wallet history</h2>
+        <p className="panel-sub">
+          <strong>Sync</strong> fetches newer activity or continues downloading older history.{' '}
+          <strong>Re-sync</strong> deletes and re-downloads only one wallet's stored activity so it
+          can be decoded again using the latest decoder. Recommendation: start with 1–5 wallets and
+          100 transactions.
+        </p>
+
+        <div className="toolbar">
+          <label className="field">
+            Search enabled wallets
+            <input
+              type="text"
+              value={walletSearch}
+              onChange={(e) => setWalletSearch(e.target.value)}
+              style={{ minWidth: 240 }}
+            />
+          </label>
+          <span className="badge accent" style={{ alignSelf: 'flex-end' }}>
             {selected.length}/{MAX_SELECTED} selected
           </span>
         </div>
 
         {selected.length > 0 && (
-          <div className="toolbar" style={{ flexWrap: 'wrap' }}>
+          <div className="toolbar">
             {selected.map((w) => (
               <button
                 key={w.id}
-                className="toggle on"
+                className="badge good"
+                style={{ cursor: 'pointer' }}
                 title="Remove from selection"
                 onClick={() => toggleSelect(w)}
               >
-                {labelFor(w)} ✕
+                {walletDisplayName(w)} ✕
               </button>
             ))}
           </div>
         )}
 
-        <table>
-          <thead>
-            <tr>
-              <th style={{ width: 40 }}></th>
-              <th>Wallet</th>
-              <th>Address</th>
-              <th>Groups</th>
-            </tr>
-          </thead>
-          <tbody>
-            {candidates.map((w) => {
-              const checked = selected.some((s) => s.id === w.id);
-              const full = !checked && selected.length >= MAX_SELECTED;
-              return (
-                <tr key={w.id}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={full}
-                      onChange={() => toggleSelect(w)}
-                    />
-                  </td>
-                  <td>{labelFor(w)}</td>
-                  <td className="mono">{shortAddr(w.address)}</td>
-                  <td>
-                    {w.groups.map((g) => (
-                      <span key={g} className="pill">
-                        {g}
-                      </span>
-                    ))}
+        <div className="table-wrap" style={{ maxHeight: 320 }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th scope="col" style={{ width: 40 }}>
+                  <span className="visually-hidden">Select</span>
+                </th>
+                <th scope="col">Wallet</th>
+                <th scope="col">Address</th>
+                <th scope="col">Groups</th>
+              </tr>
+            </thead>
+            <tbody>
+              {candidates.map((w) => {
+                const checked = selected.some((s) => s.id === w.id);
+                const full = !checked && selected.length >= MAX_SELECTED;
+                return (
+                  <tr key={w.id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={full}
+                        onChange={() => toggleSelect(w)}
+                        aria-label={`Select ${w.label ?? shortAddr(w.address)}`}
+                      />
+                    </td>
+                    <td>{walletDisplayName(w)}</td>
+                    <td className="mono">{shortAddr(w.address)}</td>
+                    <td>
+                      {w.groups.map((g) => (
+                        <span key={g} className="badge muted">
+                          {g}
+                        </span>
+                      ))}
+                    </td>
+                  </tr>
+                );
+              })}
+              {candidates.length === 0 && (
+                <tr>
+                  <td colSpan={4}>
+                    <div className="empty-state">
+                      No enabled wallets match. Import wallets on the Wallets page first.
+                    </div>
                   </td>
                 </tr>
-              );
-            })}
-            {candidates.length === 0 && (
-              <tr>
-                <td colSpan={4} className="status-muted">
-                  No enabled wallets match. Import wallets on the Tracked wallets tab first.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
 
         <div className="toolbar" style={{ marginTop: 12 }}>
-          <label className="hint" style={{ margin: 0 }}>
-            Max transactions per wallet:{' '}
+          <label className="field">
+            Max transactions per wallet
             <select value={txCap} onChange={(e) => setTxCap(Number(e.target.value))}>
               {TX_CAP_CHOICES.map((n) => (
                 <option key={n} value={n}>
@@ -280,6 +312,7 @@ export function ActivityPage() {
           </label>
           <button
             className="btn"
+            style={{ alignSelf: 'flex-end' }}
             disabled={selected.length === 0 || syncing || !providerConfigured}
             onClick={() => void runSync()}
           >
@@ -290,321 +323,170 @@ export function ActivityPage() {
         </div>
 
         {syncResults && (
-          <table style={{ marginTop: 12 }}>
+          <div className="table-wrap" style={{ marginTop: 12 }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Wallet</th>
+                  <th scope="col">Result</th>
+                  <th scope="col" className="num">Transactions</th>
+                  <th scope="col" className="num">New events</th>
+                  <th scope="col" className="num">Duplicates</th>
+                  <th scope="col" className="num">New tokens</th>
+                  <th scope="col">History</th>
+                </tr>
+              </thead>
+              <tbody>
+                {syncResults.map((r) => (
+                  <tr key={r.walletId}>
+                    <td className="mono">{shortAddr(r.address)}</td>
+                    <td>
+                      <span
+                        className={`badge ${
+                          r.status === 'ok' ? 'good' : r.status === 'locked' ? 'warn' : 'bad'
+                        }`}
+                      >
+                        {r.status}
+                        {r.error ? ` (${r.error})` : ''}
+                      </span>
+                    </td>
+                    <td className="num">{r.transactionsProcessed}</td>
+                    <td className="num">{r.eventsCreated}</td>
+                    <td className="num">{r.duplicateEvents}</td>
+                    <td className="num">{r.tokensDiscovered}</td>
+                    <td>
+                      {r.backfillComplete === null
+                        ? '—'
+                        : r.backfillComplete
+                          ? 'complete'
+                          : 'partial — sync again to continue'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="panel" aria-labelledby="activity-status">
+        <h2 id="activity-status">Synced wallets</h2>
+        <div className="table-wrap">
+          <table className="data-table">
             <thead>
               <tr>
-                <th>Wallet</th>
-                <th>Status</th>
-                <th>Transactions</th>
-                <th>Events created</th>
-                <th>Duplicates</th>
-                <th>New tokens</th>
-                <th>Backfill</th>
+                <th scope="col">Wallet</th>
+                <th scope="col">Address</th>
+                <th scope="col">Status</th>
+                <th scope="col">History</th>
+                <th scope="col" className="num">Transactions</th>
+                <th scope="col" className="num">Events</th>
+                <th scope="col">Last sync</th>
+                <th scope="col">
+                  <span className="visually-hidden">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {syncResults.map((r) => (
-                <tr key={r.walletId}>
-                  <td className="mono">{shortAddr(r.address)}</td>
+              {status?.items.map((s) => (
+                <tr key={s.walletId}>
+                  <td>{walletDisplayName(s)}</td>
+                  <td className="mono">{shortAddr(s.address)}</td>
                   <td>
                     <span
-                      className={
-                        r.status === 'ok'
-                          ? 'status-good'
-                          : r.status === 'locked'
-                            ? 'status-warn'
-                            : 'status-bad'
-                      }
+                      className={`badge ${
+                        s.status === 'error' ? 'bad' : s.status === 'syncing' ? 'warn' : 'good'
+                      }`}
                     >
-                      {r.status}
-                      {r.error ? ` (${r.error})` : ''}
+                      {s.status}
+                      {s.lastError ? ` (${s.lastError})` : ''}
                     </span>
                   </td>
-                  <td>{r.transactionsProcessed}</td>
-                  <td>{r.eventsCreated}</td>
-                  <td>{r.duplicateEvents}</td>
-                  <td>{r.tokensDiscovered}</td>
+                  <td>{s.backfillComplete ? 'complete' : 'partial'}</td>
+                  <td className="num">{s.totalTransactions.toLocaleString()}</td>
+                  <td className="num">{s.totalEvents.toLocaleString()}</td>
+                  <td className="status-muted">
+                    {s.lastSyncAt ? formatTime(s.lastSyncAt) : '—'}
+                  </td>
                   <td>
-                    {r.backfillComplete === null ? '—' : r.backfillComplete ? 'complete' : 'partial — sync again to continue'}
+                    <button
+                      className="btn secondary small"
+                      disabled={resyncBusy || !providerConfigured}
+                      onClick={() => setResyncTarget(s)}
+                    >
+                      Re-sync
+                    </button>
                   </td>
                 </tr>
               ))}
+              {status && status.items.length === 0 && (
+                <tr>
+                  <td colSpan={8}>
+                    <div className="empty-state">
+                      Nothing synced yet. Select wallets above and fetch their history.
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section className="panel" aria-labelledby="activity-events">
+        <h2 id="activity-events">
+          Activity {events ? `(${events.total.toLocaleString()} events)` : ''}
+        </h2>
+        <div className="toolbar">
+          <label className="field">
+            Wallet
+            <select
+              value={walletFilter}
+              onChange={(e) => {
+                setWalletFilter(e.target.value);
+                setEventPage(1);
+              }}
+            >
+              <option value="">All synced wallets</option>
+              {status?.items.map((s) => (
+                <option key={s.walletId} value={s.walletId}>
+                  {s.label ?? shortAddr(s.address)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Event type
+            <select
+              value={typeFilter}
+              onChange={(e) => {
+                setTypeFilter(e.target.value);
+                setEventPage(1);
+              }}
+            >
+              <option value="">All event types</option>
+              {EVENT_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
+          {eventsLoading && <span className="status-muted" style={{ alignSelf: 'flex-end' }}>Loading…</span>}
+        </div>
+
+        {events === null ? (
+          <div className="empty-state">
+            <span className="skeleton" style={{ width: '60%' }} />
+          </div>
+        ) : (
+          <EventList events={events.items} mode={mode} />
         )}
-      </div>
-
-      <div className="panel">
-        <h2>Sync status</h2>
-        <div className="toolbar">
-          <button className="btn secondary" onClick={() => void loadStatus()}>
-            Refresh
-          </button>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Wallet</th>
-              <th>Address</th>
-              <th>Status</th>
-              <th>Backfill</th>
-              <th>Transactions</th>
-              <th>Events</th>
-              <th>Last sync</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {status?.items.map((s) => (
-              <tr key={s.walletId}>
-                <td>{labelFor(s)}</td>
-                <td className="mono">{shortAddr(s.address)}</td>
-                <td>
-                  <span
-                    className={
-                      s.status === 'error'
-                        ? 'status-bad'
-                        : s.status === 'syncing'
-                          ? 'status-warn'
-                          : 'status-good'
-                    }
-                  >
-                    {s.status}
-                    {s.lastError ? ` (${s.lastError})` : ''}
-                  </span>
-                </td>
-                <td>{s.backfillComplete ? 'complete' : 'partial'}</td>
-                <td>{s.totalTransactions.toLocaleString()}</td>
-                <td>{s.totalEvents.toLocaleString()}</td>
-                <td className="status-muted">
-                  {s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleString() : '—'}
-                </td>
-                <td>
-                  <button
-                    className="toggle"
-                    title="Clear this wallet's events and re-fetch with the current decoder"
-                    disabled={resyncingId !== null || !providerConfigured}
-                    onClick={() => void resyncWallet(s.walletId, s.label ?? shortAddr(s.address))}
-                  >
-                    {resyncingId === s.walletId ? 'Re-syncing…' : 'Re-sync'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {status && status.items.length === 0 && (
-              <tr>
-                <td colSpan={8} className="status-muted">
-                  Nothing synced yet. Select wallets above and run a sync.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        <p className="hint">
-          Events stored before the current decoder are marked in the feed below; use Re-sync to
-          re-decode a wallet's history (raw transaction payloads are not stored locally, so
-          re-decoding requires re-fetching).
-        </p>
-      </div>
-
-      <div className="panel">
-        <h2>Wallet events {events ? `(${events.total.toLocaleString()})` : ''}</h2>
-        <div className="toolbar">
-          <select
-            value={walletFilter}
-            onChange={(e) => {
-              setWalletFilter(e.target.value);
-              setEventPage(1);
-            }}
-          >
-            <option value="">All synced wallets</option>
-            {status?.items.map((s) => (
-              <option key={s.walletId} value={s.walletId}>
-                {s.label ?? shortAddr(s.address)}
-              </option>
-            ))}
-          </select>
-          <select
-            value={typeFilter}
-            onChange={(e) => {
-              setTypeFilter(e.target.value);
-              setEventPage(1);
-            }}
-          >
-            <option value="">All event types</option>
-            {EVENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          {eventsLoading && <span className="status-muted">Loading…</span>}
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Wallet</th>
-              <th>Type</th>
-              <th>Token</th>
-              <th>Amount</th>
-              <th>Swap quote</th>
-              <th>Wallet Δ SOL</th>
-              <th>Router → venue</th>
-              <th>Conf.</th>
-              <th>Tx</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events?.items.map((e) => {
-              const isTrade = e.eventType === 'BUY' || e.eventType === 'SELL';
-              const quoteUnknown = isTrade && e.quoteAmount === null;
-              const warn = hasUnattributed(e.unattributedSol) || e.decoderVersion < 2;
-              const expanded = expandedEventId === e.id;
-              return [
-                <tr
-                  key={e.id}
-                  onClick={() => setExpandedEventId(expanded ? null : e.id)}
-                  style={{ cursor: 'pointer' }}
-                  title="Click for the full decoding breakdown"
-                >
-                  <td className="status-muted">
-                    {e.blockTime ? new Date(e.blockTime).toLocaleString() : '—'}
-                  </td>
-                  <td>{labelFor(e.wallet)}</td>
-                  <td>
-                    <span className={`pill ${typeClass(e.eventType)}`}>{e.eventType}</span>
-                  </td>
-                  <td className="mono">
-                    {e.token ? (
-                      <a
-                        href={`https://solscan.io/token/${e.token.mintAddress}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(ev) => ev.stopPropagation()}
-                      >
-                        {e.token.symbol ?? shortAddr(e.token.mintAddress)}
-                      </a>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td>{formatAmount(e.tokenAmount)}</td>
-                  <td>
-                    {e.quoteAmount !== null ? (
-                      `${formatAmount(e.quoteAmount)} ${
-                        e.quoteMint === 'SOL' ? 'SOL' : (e.quoteMint ?? '')
-                      }`
-                    ) : quoteUnknown ? (
-                      <span className="status-warn">unknown</span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className={e.walletSolChange !== null && e.walletSolChange < 0 ? 'status-bad' : 'status-good'}>
-                    {e.walletSolChange !== null ? formatAmount(e.walletSolChange) : '—'}
-                  </td>
-                  <td className="status-muted">
-                    {e.source && e.venue && e.source !== e.venue
-                      ? `${e.source} → ${e.venue}`
-                      : (e.venue ?? e.source ?? '—')}
-                  </td>
-                  <td>
-                    <span className={`pill ${confidenceClass(e.confidence)}`}>
-                      {e.confidence ?? 'v1'}
-                    </span>
-                    {warn && (
-                      <span
-                        className="status-warn"
-                        title={
-                          e.decoderVersion < 2
-                            ? 'Decoded by the legacy decoder — re-sync this wallet for exact amounts'
-                            : `Unattributed SOL difference: ${formatSol(e.unattributedSol)}`
-                        }
-                      >
-                        {' '}
-                        ⚠
-                      </span>
-                    )}
-                  </td>
-                  <td className="mono">
-                    <a
-                      href={`https://solscan.io/tx/${e.signature}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(ev) => ev.stopPropagation()}
-                    >
-                      {e.signature.slice(0, 8)}…
-                    </a>
-                  </td>
-                </tr>,
-                expanded ? (
-                  <tr key={`${e.id}-detail`}>
-                    <td colSpan={10} style={{ background: 'var(--panel-2)' }}>
-                      <div style={{ padding: '10px 6px', fontSize: 13, lineHeight: 1.7 }}>
-                        {e.decoderVersion < 2 && (
-                          <div className="status-warn" style={{ marginBottom: 6 }}>
-                            ⚠ Legacy event (decoder v1): amounts may include fees. Re-sync this
-                            wallet to re-decode with exact swap legs.
-                          </div>
-                        )}
-                        {e.explanation && <div style={{ marginBottom: 8 }}>{e.explanation}</div>}
-                        <div className="import-summary" style={{ marginTop: 0 }}>
-                          <span>
-                            swap in <strong>{e.swapInAmount !== null ? `${formatAmount(e.swapInAmount)} ${e.swapInMint === 'SOL' ? 'SOL' : (e.swapInMint ? shortAddr(e.swapInMint) : '')}` : 'unknown'}</strong>
-                          </span>
-                          <span>
-                            swap out <strong>{e.swapOutAmount !== null ? `${formatAmount(e.swapOutAmount)} ${e.swapOutMint === 'SOL' ? 'SOL' : (e.swapOutMint ? shortAddr(e.swapOutMint) : '')}` : 'unknown'}</strong>
-                          </span>
-                          <span>
-                            wallet Δ <strong>{formatSol(e.walletSolChange)}</strong>
-                          </span>
-                          <span>
-                            network fee <strong>{formatSol(e.networkFeeSol)}</strong>
-                          </span>
-                          <span>
-                            priority fee <strong>{formatSol(e.priorityFeeSol)}</strong>
-                          </span>
-                          <span>
-                            platform fee <strong>{formatSol(e.platformFeeSol)}</strong>
-                          </span>
-                          <span>
-                            tip <strong>{formatSol(e.tipSol)}</strong>
-                          </span>
-                          <span>
-                            rent <strong>{formatSol(e.rentSol)}</strong>
-                          </span>
-                          <span>
-                            unrelated in/out{' '}
-                            <strong>
-                              {formatSol(e.unrelatedSolIn)} / {formatSol(e.unrelatedSolOut)}
-                            </strong>
-                          </span>
-                          <span className={hasUnattributed(e.unattributedSol) ? 'status-warn' : ''}>
-                            unattributed <strong>{formatSol(e.unattributedSol)}</strong>
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                ) : null,
-              ];
-            })}
-            {events && events.items.length === 0 && (
-              <tr>
-                <td colSpan={10} className="status-muted">
-                  No events recorded yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
 
         {events && events.total > events.pageSize && (
           <div className="pagination">
             <button
-              className="btn secondary"
+              className="btn secondary small"
               disabled={eventPage <= 1}
               onClick={() => setEventPage((p) => p - 1)}
             >
@@ -614,7 +496,7 @@ export function ActivityPage() {
               Page {eventPage} of {Math.max(1, Math.ceil(events.total / events.pageSize))}
             </span>
             <button
-              className="btn secondary"
+              className="btn secondary small"
               disabled={eventPage >= Math.ceil(events.total / events.pageSize)}
               onClick={() => setEventPage((p) => p + 1)}
             >
@@ -622,7 +504,16 @@ export function ActivityPage() {
             </button>
           </div>
         )}
-      </div>
+      </section>
+
+      {resyncTarget && (
+        <ConfirmResyncModal
+          walletName={resyncTarget.label ?? shortAddr(resyncTarget.address)}
+          busy={resyncBusy}
+          onConfirm={() => void confirmResync()}
+          onCancel={() => setResyncTarget(null)}
+        />
+      )}
     </div>
   );
 }

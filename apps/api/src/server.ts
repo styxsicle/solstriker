@@ -2,6 +2,8 @@ import { buildApp } from './app.js';
 import { createPrisma } from './db.js';
 import { loadEnv } from './env.js';
 import { createHeliusProvider } from './providers/solana/heliusProvider.js';
+import { createMarketDataProvider } from './providers/market/providerFactory.js';
+import { createHistoricalMarketProvider } from './providers/historicalMarket/providerFactory.js';
 import { createRpcClient } from './rpc.js';
 
 async function main() {
@@ -12,8 +14,18 @@ async function main() {
     apiKey: env.HELIUS_API_KEY,
     cluster: env.SOLANA_CLUSTER,
   });
+  const marketProvider = createMarketDataProvider(env.MARKET_DATA_PROVIDER);
+  const historicalProvider = createHistoricalMarketProvider(env.HISTORICAL_MARKET_PROVIDER);
 
-  const app = await buildApp({ prisma, env, rpc, activityProvider, logger: { level: 'info' } });
+  const app = await buildApp({
+    prisma,
+    env,
+    rpc,
+    activityProvider,
+    marketProvider,
+    historicalProvider,
+    logger: { level: 'info' },
+  });
 
   try {
     await app.listen({ port: env.API_PORT, host: '127.0.0.1' });

@@ -1,8 +1,9 @@
 # HANDOFF
 
 Continuation notes for any coding model/agent picking up this project.
-**Current state: Phase 1C complete** (1A foundation, 1B activity ingestion,
-1C reliable swap decoding). Do not start Phase 1D until the user asks.
+**Current state: Phase 1D-B1 complete** (1A foundation, 1B activity ingestion,
+1C reliable swap decoding, 1D-A beginner-friendly UI shell, 1D-B1 current token
+market snapshots). Do not start Phase 1D-B2 until the user asks.
 
 ## What this project is
 
@@ -21,9 +22,45 @@ seed phrases, no transaction signing, no real trades — ever.
   - `apps/api` — Fastify 5 + Prisma + Zod. `buildApp(deps)` in `src/app.ts` takes
     injected `{ prisma, env, rpc, activityProvider, syncOptions? }` so tests run
     fully offline via `app.inject()`. Entry `src/server.ts` (binds 127.0.0.1).
-  - `apps/web` — React 18 + Vite 6 dark dashboard, four tabs (System status,
-    Tracked wallets, Tokens, Activity), plain CSS, no router. Talks to the API via
+  - `apps/web` — React 18 + Vite 6 dark dashboard. Phase 1D-A shell: desktop
+    sidebar + mobile top nav (hash-based navigation, no router dependency),
+    pages Overview / Wallets / Activity / Tokens / Help, plus visibly disabled
+    "Coming later" entries (Signals, Coin Analyzer, Backtesting, Wallet
+    Intelligence, Alerts — no fake data). Talks to the API via
     `VITE_API_BASE_URL` only.
+
+### Frontend structure (Phase 1D-A)
+
+- `src/lib/mode.tsx` — `ModeProvider`/`useMode`: `'simple' | 'quant'`,
+  default simple, persisted under localStorage key `memecoin-lab.ui-mode`,
+  switching never reloads. Simple Mode explains the same real data in
+  sentences; Quant Mode preserves every raw field (exact decimals, decoder
+  version, fee attribution, router/venue, confidence).
+- `src/lib/wording.ts` — the beginner sentences and REQUIRED exact strings:
+  buy/sell/transfer sentences, `UNKNOWN_QUOTE_TEXT`
+  ("Exact SOL amount could not be verified."), `UNKNOWN_ACTIVITY_TEXT`, and
+  `confidenceInfo()` (Confirmed/Likely/Unknown wording + icon + tone — text
+  and icon, never color alone). Tests pin these strings.
+- `src/lib/format.ts` — compact ("15.6M") vs exact formatting, addresses,
+  signatures, SOL amounts, timestamps.
+- `src/components/` — `Sidebar` (nav + disabled future features), `ModeToggle`
+  (aria-pressed group), `PageHeader`, `Modal` (dialog semantics, Escape,
+  focus), `ConfirmResyncModal` (names the wallet; explains only its events +
+  sync state are replaced, record kept, others unaffected), `EventList`
+  (Simple = sentence cards with "See details"; Quant = sticky-header technical
+  table), `EventDetails` (full fee/decoder breakdown shared by both modes,
+  unknowns labeled "not available").
+- `src/pages/` — `OverviewPage` (plain-language health + research DB stats +
+  capabilities done/not-implemented + "historical research only" notice),
+  `WalletsPage` (import steps, large-file confirm modal >1 MB, enabled/
+  disabled/DEV explanations, dev records hidden by default), `ActivityPage`
+  (summary cards, sync guidance "start with 1–5 wallets and 100 transactions",
+  resync via modal), `TokensPage` (column explanations, dev toggle),
+  `HelpPage` (glossary + privacy/safety).
+- `src/styles.css` — design system: CSS variables, responsive shell
+  (sidebar ≤860px collapses to top nav), cards/badges/buttons/inputs/tables
+  (sticky thead, horizontal scroll), notices, empty states, skeletons,
+  focus-visible outlines, reduced-motion support, `.visually-hidden`.
   - `prisma/` at the repo root — schema, migrations, `dev.db` (gitignored).
 
 ### Provider isolation (Phase 1B, extended in 1C)
@@ -125,11 +162,13 @@ Migrations: `20260711012659_init`, `20260711031157_wallet_activity`,
 | --- | --- |
 | `GET /api/health` | API + DB status |
 | `GET /api/rpc/status` | Sanitized Helius `getHealth` + `getSlot` |
-| `GET /api/wallets` | Pagination, `search`, `group`, `enabled`; returns `stats` + distinct `groups` |
+| `GET /api/overview` | Read-only research-DB counts: wallets (total/enabled/dev), synced wallets, stored events, tokens (total/dev) |
+| `GET /api/wallets` | Pagination, `search`, `group`, `enabled`, `includeDev` (`false` hides dev-seed; absent = prior behavior); returns `stats` + distinct `groups` |
 | `POST /api/wallets` | Manual add (400 `invalid_address`, 409 `duplicate_address`) |
 | `POST /api/wallets/import` | CSV / text / JSON export, auto-detect; idempotent |
 | `PATCH /api/wallets/:id` | Partial update incl. `enabled` |
-| `GET /api/tokens` | List; `liveDiscovery: false` |
+| `GET /api/tokens` | List; `includeDev` param as above; `liveDiscovery: false` |
+| `GET /api/activity/summary` | Read-only event counts by type/confidence, legacy (decoder v1) count, transactions checked — deliberately no profit/win-rate/performance metrics |
 | `POST /api/dev/seed` | Dev only; idempotent synthetic data |
 | `POST /api/activity/sync` | Body `{ walletIds: string[] (1–10), maxTransactions?: 1–500 (default 200) }`. 503 `provider_not_configured`; 400 `unknown_wallet` / `wallet_disabled` / validation. Sequential; per-wallet results `{ status: ok\|locked\|error, transactionsProcessed, eventsCreated, duplicateEvents, tokensDiscovered, backfillComplete, error }` |
 | `GET /api/activity/status` | `providerConfigured`, `maxWalletsPerSync`, per-wallet sync states |
@@ -169,9 +208,19 @@ the repo; `.env` is gitignored.
 ## Tests (all offline — fake keys, injected fetch mocks, FakeProvider)
 
 - shared (22): base58, address validation, import parsers.
-- api (67): Phase 1A suites (health, RPC sanitization, wallet CRUD, import,
-  seed); provider mapping incl. swap events/instructions/retries/key-leak
-  sanitization (6); classification paths — decoded buys/sells, token→token,
+- web (29, vitest + jsdom + @testing-library/react, config
+  `apps/web/vitest.config.ts`, fixtures use synthetic addresses only):
+  wording (exact buy/sell/transfer sentences, unknown-quote and unknown-
+  activity strings, all three confidence texts + legacy), mode (simple
+  default, persistence, switch without reload), resync modal (naming, scope
+  explanation, explicit confirm, Escape), sidebar (future features disabled
+  and labeled), EventList (simple sentences + details expansion + empty state;
+  quant exact decimals), TokensPage dev-record hiding + reveal, page smoke
+  renders (Overview simple/quant, Wallets, Activity, Help).
+- api (71): Phase 1A suites (health, RPC sanitization, wallet CRUD, import,
+  seed); overview / activity summary / includeDev filtering (4); provider
+  mapping incl. swap events/instructions/retries/key-leak sanitization (6);
+  classification paths — decoded buys/sells, token→token,
   router vs venue, heuristic LIKELY with null quotes, transfers, UNKNOWN
   two-direction, failed/no-op txs (12); decoding fixtures — the real-numbers
   Pump.fun bug case, instruction-reconstructed sell with balance-identity
@@ -218,11 +267,221 @@ the repo; `.env` is gitignored.
   they are flagged in the UI and must be re-synced (raw payloads aren't stored).
 - Activity-discovered tokens have no name/symbol yet (next phase).
 - Locks are in-process; API is local single-user, binds 127.0.0.1, no auth.
+- UI (Phase 1D-A): no browser-automation tests — rendering is verified via
+  jsdom component tests; visual/mobile layout was checked via responsive CSS
+  only. Tooltips use `title`/expandable sections, not a custom tooltip system.
+  Sync progress has no live indicator (request is synchronous). The mode
+  toggle affects presentation only — all data comes from the same endpoints.
+- Dev-record hiding is a client-side default (`includeDev=false` param);
+  the API without the param behaves exactly as before.
 
-## Exact next checkpoint (Phase 1D — wait for the user's go-ahead)
+---
 
-Token metrics collection: enrich activity-discovered tokens with metadata
-(name/symbol/decimals), add periodic token metric snapshots (price, liquidity,
-holder count, volume) behind the same provider-isolation pattern, and implement
-stage classification rules for `FINAL_STRETCH` / `MIGRATED`. Keep everything
-read-only, offline-testable, and key-sanitized.
+## Phase 1D-B1 — Current token market snapshots
+
+### Provider selection
+
+- **Selected provider: DexScreener.** Chosen because its public token endpoint
+  returns Solana token/pair data (price USD + native, liquidity, market cap,
+  FDV, multi-window volume, txn counts, price changes, pair address, DEX, base/
+  quote tokens) in one call, with **no API key required** — so the app needs no
+  new secret and boots without provider configuration.
+- **Official documentation consulted:** https://docs.dexscreener.com/api/reference
+  (accessed **2026-07-11**). Endpoint used:
+  `GET https://api.dexscreener.com/tokens/v1/{chainId}/{tokenAddresses}`
+  ("Get one or multiple pairs by token address"), documented **rate limit 300
+  requests/minute**, `securities: []` (no auth). Up to 30 comma-separated
+  addresses per call. The live response schema was inspected once to confirm
+  field names/types; no unofficial sources were relied upon.
+- **Authentication:** none required for the selected endpoint. No provider
+  secret exists; if a future provider needs one it must live backend-only (never
+  a `VITE_` variable), like the Helius key.
+
+### Env / configuration
+
+- `MARKET_DATA_PROVIDER` (default `dexscreener`; `none` disables lookups).
+  Backend-only. Added to `.env.example`. No credential.
+
+### Provider architecture (`apps/api/src/providers/market/`)
+
+- `types.ts` — provider-neutral `MarketPairCandidate` / `MarketLookupResult`.
+  All financial values are **exact decimal strings** or null (never zero).
+- `errors.ts` — `MarketProviderError` (codes `not_configured`, `rate_limited`,
+  `timeout`, `network_error`, `bad_request`, `malformed_response`,
+  `provider_error`; `retryable` flag). Messages are generic — never URLs/keys.
+- `marketDataProvider.ts` — `MarketDataProvider` interface (`isConfigured()`,
+  `lookupTokens(mints)`), fetch-injectable for tests.
+- `dexscreenerProvider.ts` — the only DexScreener-aware file. Maps raw pairs
+  defensively (`mapRawDexscreenerPair`, exported for tests): malformed numbers →
+  null, negative/non-integer txn counts → null. Batches ≤30 mints/call,
+  attributes each pair to the requested mint whether it is base or quote.
+  Bounded timeout (15s), retry with capped backoff on 429/5xx/network/timeout,
+  respects `Retry-After`, **no retry on permanent 4xx**.
+- `providerFactory.ts` — `createMarketDataProvider(name)` → DexScreener or an
+  unconfigured stub for `none`/unknown.
+- `pairSelection.ts` — deterministic `selectBestPair(mint, candidates)`:
+  Solana-only, must contain the mint and have a pair address; dedupes by pair
+  address; prefers base-side priced pairs ranked liquidity → 24h vol → 1h vol →
+  pairCreatedAt → quote preference (SOL, then USDC/USDT) → pairAddress. A
+  base-side pair with no parseable price is kept as `no_parseable_price`
+  (identity only). If the mint appears **only as the quote token**, returns
+  `token_only_appears_as_quote` (identity preserved, **price never inverted**).
+  Confidence: HIGH (price+liquidity+24h vol), MEDIUM (price + one), LOW (price
+  only), UNKNOWN.
+
+### Normalization & market cap vs FDV
+
+- `services/tokenMetrics/normalization.ts` builds snapshot fields from the
+  selected pair. **Market cap and FDV are stored strictly separately** — FDV is
+  never substituted for market cap. `priceSol` is set only when the selected
+  pair's quote is wrapped SOL (else null; `priceNative` in non-SOL units is not
+  a SOL price). Status: `COMPLETE` requires price + liquidity + 24h volume +
+  (market cap or FDV); otherwise `PARTIAL`; `NOT_FOUND` / `ERROR` for no-pair /
+  provider-failure. Unknown fields are null.
+
+### Refresh engine (`services/tokenMetrics/refreshTokenMetrics.ts`)
+
+- `MAX_TOKENS_PER_REFRESH = 20`. Module-level lock
+  (`tryAcquireRefreshLock`/`releaseRefreshLock`, owned by the route in a
+  try/finally). One provider batch lookup happens **before** any DB writes — no
+  transaction is held open across HTTP. One snapshot row per requested token per
+  run (enforced by `@@unique([refreshRunId, tokenId])`). A provider failure
+  writes `ERROR` snapshots for every token instead of aborting the run
+  (per-token isolation). Token `name`/`symbol` are filled **only when currently
+  null** — provider data never overwrites curated metadata. Run status:
+  `COMPLETED` (no errors; NOT_FOUND is an answer), `PARTIAL` (some errors),
+  `FAILED` (all errors).
+
+### Freshness (`services/tokenMetrics/freshness.ts`)
+
+- Single source of truth. `FRESH_MAX_AGE_SECONDS = 300` (5 min),
+  `AGING_MAX_AGE_SECONDS = 3600` (60 min). Categories `FRESH`/`AGING`/`STALE`/
+  `NEVER_FETCHED`/`UNKNOWN`, computed from the latest usable (COMPLETE/PARTIAL)
+  snapshot's `observedAt`. DexScreener exposes no observation timestamp, so
+  `observedAt = fetchedAt`. Manual snapshots are never labeled "live".
+
+### Database models (migration `20260712043845_token_market_snapshots`, additive)
+
+- `TokenMarketRefreshRun`: id, provider, status (RUNNING/COMPLETED/PARTIAL/
+  FAILED), startedAt, completedAt?, requested/processed/complete/partial/
+  notFound/error/snapshot counts, sanitizedErrorSummary?, timestamps.
+  Index: `startedAt`.
+- `TokenMarketSnapshot`: id, tokenId, refreshRunId, observedAt, fetchedAt,
+  priceUsd?, priceSol?, marketCapUsd?, fdvUsd?, liquidityUsd?, volume{5m,1h,6h,
+  24h}Usd?, buys/sells{5m,1h,6h,24h}?, priceChange{5m,1h,6h,24h}Pct?,
+  pairAddress?, dex?, baseMint?, quoteMint?, tokenName?, tokenSymbol?, source,
+  status (COMPLETE/PARTIAL/NOT_FOUND/ERROR), confidence (HIGH/MEDIUM/LOW/
+  UNKNOWN), selectionReason?, sanitizedErrorCode?, timestamps. **Financial
+  values are stored as exact decimal STRINGS** (SQLite has no Decimal; strings
+  avoid float loss). Unique `[refreshRunId, tokenId]`; indexes on
+  `[tokenId, observedAt]`, `[tokenId, fetchedAt]`, `refreshRunId`, `source`,
+  `status`, `observedAt`. Both cascade-delete with their parent.
+- No changes to Wallet/WalletEvent/WalletSyncState. `Token` gains only the
+  additive `marketSnapshots` relation; name/symbol are existing nullable fields.
+
+### API routes (`routes/tokenMetrics.ts`)
+
+- `POST /api/token-metrics/refresh` — body `{ tokens: string[] (ids or mints,
+  1–20), includeDev?: boolean }`. Rejects empty (400 validation), duplicates
+  (400 `duplicate_selection`), >20 (400), unknown/invalid mints (400
+  `unknown_token`/`invalid_mint_address`), dev tokens without includeDev (400
+  `dev_token_excluded`), includeDev in production (403). 503 if provider
+  unconfigured, 409 `refresh_in_progress` if locked. Returns run id + totals
+  (requested/processed/complete/partial/notFound/failed/snapshotsInserted/
+  duplicatesPrevented) + per-token results (mint, status, confidence, pair, dex,
+  observedAt, sanitizedErrorCode). No raw payloads.
+- `GET /api/token-metrics` — latest usable snapshot per token, with freshness.
+- `GET /api/token-metrics/:mint/latest` — latest + latestUsable + freshness/age
+  (404 unknown token).
+- `GET /api/token-metrics/:mint/snapshots` — paginated history.
+- `GET /api/token-metrics/refresh-runs/:id` — run totals + per-token snapshots.
+- `GET /api/tokens` extended: `withMarket=true` attaches the latest snapshot
+  (absent = unchanged legacy shape), `marketData=with|without` filters,
+  `sort=marketCap|liquidity|volume24h|lastCollected` (descending, unknown last).
+  `includeDev=false` preserved.
+- `GET /api/overview` extended with a `market` block: nonDevTokens, withSnapshots,
+  neverRefreshed, fresh/aging/stale, partialLatest, lastSuccessfulRefreshAt,
+  lastRunStatus.
+
+### Tokens page — Simple Mode
+
+Market cards per token with humanized USD/percent values and plain-language
+explanations (market cap, FDV, liquidity, volume, price change, freshness as
+tooltips). "Market data has not been collected for this token yet." when no
+snapshot; "Not reported by the selected provider." for missing fields (never a
+bare dash, never zero). Selection controls: per-token checkbox, "Select visible
+tokens", "Clear selection", `n/20 selected`, refresh button disabled with no
+selection / while busy, completion totals. No refresh-all. No good/bad/safe/
+buy/sell/early/late language.
+
+### Tokens page — Quant Mode
+
+Exact decimal strings verbatim (price USD/SOL, market cap, FDV, liquidity, all
+volume/txn/price-change windows), pair address, base/quote mint, DEX, provider,
+status, confidence, selection reason, observed/fetched, age, freshness, plus the
+existing discovery fields (stage, source, discovered, last seen). Table scrolls
+horizontally. Missing values show "unknown", never zero.
+
+### Testing (Phase 1D-B1)
+
+- API +64 (135 total): DexScreener mapping/decimal preservation/malformed
+  coercion (dexscreenerProvider.test), retries/Retry-After/timeout/permanent-400/
+  sanitization, provider factory, pair selection + tie-breaking + quote-side +
+  normalization (pairSelection.test), refresh engine (empty/dup/>20/unknown/dev/
+  includeDev/production, COMPLETE/PARTIAL/NOT_FOUND/ERROR, run totals, per-token
+  isolation, lock release, dup-snapshot constraint, metadata-fill policy,
+  read routes), tokens+overview market integration, freshness classification.
+- Web +13 (42 total): no-market-data wording, missing-field wording, market
+  cap/FDV/liquidity explanations, freshness display, selection/select-visible/
+  clear, refresh disabled/loading, complete + partial results, rate-limit
+  wording, dev hidden-by-default + reveal, Quant exact decimals + "unknown".
+- Shared unchanged (22). All providers mocked; no real network in automated
+  tests; synthetic mints only.
+
+### Manual verification performed (2026-07-12)
+
+- Booted API + web. Refreshed **exactly 2 real activity-discovered tokens**
+  against live DexScreener. Both returned PARTIAL/MEDIUM (liquidity genuinely not
+  reported by the provider → stored null, not zero). Compared one snapshot field-
+  by-field with a direct DexScreener call: priceUsd, priceNative (priceSol),
+  marketCap, fdv (equal for that token but stored separately), 24h volume, DEX,
+  quote mint, selection reason all matched exactly; freshness FRESH; observedAt
+  present. Verified overview market counts updated (withSnapshots 2, fresh 2,
+  partialLatest 2, lastRunStatus COMPLETED) and error states (empty 400,
+  duplicate_selection, invalid_mint_address). Frontend served (`<title>` check).
+  **Browser checks:** only served-page / jsdom-level; no browser-automation was
+  run — Simple/Quant rendering is covered by jsdom component tests, and mobile
+  layout relies on the existing responsive CSS (not visually verified here).
+
+### Database before/after (Phase 1D-B1)
+
+- TrackedWallet 1024 → 1024 (unchanged); WalletEvent 86 → 86 (unchanged);
+  WalletSyncState 1 → 1 (unchanged); Token 65 → 65 (no creates/deletes);
+  TokenMarketSnapshot 0 → 2 (added); TokenMarketRefreshRun 0 → 1 (added).
+
+### Known limitations (Phase 1D-B1)
+
+- Snapshots are point-in-time; no historical candles or post-entry outcomes
+  (Phase 1D-B2). Manual refresh only — no scheduling/polling/background workers.
+- DexScreener has no observation timestamp, so `observedAt = fetchedAt`.
+- Pair selection needs the mint as the base token for prices; quote-only tokens
+  are PARTIAL with no price (no inversion). Cross-pool aggregation is never done.
+- Financial values are decimal strings (exact) — consumers must not coerce to
+  Number where precision matters.
+- Refresh lock is in-process (single-user local API); concurrent refresh → 409.
+
+### Security notes
+
+- No provider secret exists or is required; nothing market-related reaches the
+  frontend as a secret. Provider errors are sanitized to codes; request URLs,
+  headers, and raw payloads are never logged or returned. `MARKET_DATA_PROVIDER`
+  is backend-only.
+
+## Exact next checkpoint (Phase 1D-B2 — wait for the user's go-ahead)
+
+**Phase 1D-B2 — Historical OHLCV candle collection, bounded backfilling, and
+post-wallet-entry market outcomes.** Collect historical OHLCV candles (bounded
+backfill), compute market outcomes after a tracked wallet's entry, and add
+periodic snapshotting behind the same provider-isolation pattern. Keep
+everything read-only, offline-testable, and key-sanitized. Do not add wallet
+scoring, rankings, FOMO analysis, predictions, or trade recommendations.

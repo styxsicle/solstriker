@@ -10,6 +10,8 @@ const listQuerySchema = z.object({
   search: z.string().trim().optional(),
   group: z.string().trim().optional(),
   enabled: z.enum(['true', 'false']).optional(),
+  // 'false' hides synthetic dev-seed records; absent keeps prior behavior.
+  includeDev: z.enum(['true', 'false']).optional(),
 });
 
 const createBodySchema = z.object({
@@ -68,10 +70,11 @@ export function registerWalletRoutes(app: FastifyInstance, prisma: PrismaClient)
     if (!query.success) {
       return reply.code(400).send({ error: 'validation_error', issues: query.error.issues });
     }
-    const { page, pageSize, search, group, enabled } = query.data;
+    const { page, pageSize, search, group, enabled, includeDev } = query.data;
 
     const where = {
       ...(enabled !== undefined ? { enabled: enabled === 'true' } : {}),
+      ...(includeDev === 'false' ? { source: { not: 'dev-seed' } } : {}),
       ...(group
         ? { OR: [{ group }, { groupsJson: { contains: `"${group}"` } }] }
         : {}),

@@ -4,9 +4,15 @@ import type { PrismaClient } from '@prisma/client';
 import type { AppEnv } from './env.js';
 import type { RpcClient } from './rpc.js';
 import type { SolanaActivityProvider } from './providers/solana/provider.js';
+import type { MarketDataProvider } from './providers/market/marketDataProvider.js';
+import type { HistoricalMarketProvider } from './providers/historicalMarket/historicalMarketProvider.js';
 import { registerWalletRoutes } from './routes/wallets.js';
 import { registerTokenRoutes } from './routes/tokens.js';
 import { registerActivityRoutes } from './routes/activity.js';
+import { registerOverviewRoute } from './routes/overview.js';
+import { registerTokenMetricsRoutes } from './routes/tokenMetrics.js';
+import { registerHistoricalMarketRoutes } from './routes/historicalMarket.js';
+import { registerWalletOutcomesRoutes } from './routes/walletOutcomes.js';
 import type { SyncWalletOptions } from './services/activity/syncWallet.js';
 import { runDevSeed } from './services/seed.js';
 
@@ -15,6 +21,8 @@ export interface AppDeps {
   env: AppEnv;
   rpc: RpcClient;
   activityProvider: SolanaActivityProvider;
+  marketProvider: MarketDataProvider;
+  historicalProvider: HistoricalMarketProvider;
   /** Overrides for tests (e.g. pauseMs: 0). */
   syncOptions?: Partial<SyncWalletOptions>;
   logger?: boolean | object;
@@ -48,6 +56,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   registerWalletRoutes(app, prisma);
   registerTokenRoutes(app, prisma);
+  registerOverviewRoute(app, prisma);
+  registerTokenMetricsRoutes(app, {
+    prisma,
+    marketProvider: deps.marketProvider,
+    nodeEnv: env.NODE_ENV,
+  });
+  registerHistoricalMarketRoutes(app, {
+    prisma,
+    historicalProvider: deps.historicalProvider,
+    nodeEnv: env.NODE_ENV,
+  });
+  registerWalletOutcomesRoutes(app, { prisma });
   registerActivityRoutes(app, {
     prisma,
     provider: deps.activityProvider,

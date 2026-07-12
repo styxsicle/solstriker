@@ -62,11 +62,57 @@ signing, and real trades.
   breakdown, unattributed warnings, per-wallet Re-sync
 - 26 new offline tests (89 total); verified against 2 real mainnet transactions
 
-### ⏭ Phase 1D — Token metrics collection (next)
+### ✅ Phase 1D-A — Beginner-friendly UI and product foundation (complete)
 
-- Periodic token metric snapshots (price, liquidity, holders, volume)
+- Application shell: desktop sidebar + mobile top nav, hash navigation, page
+  headers, reusable cards/badges/notices/modals/empty states/skeletons,
+  responsive layouts, accessibility (semantic headings, labels, focus states,
+  aria, no color-only signals)
+- Simple Mode (default) and Quant Mode, persisted in localStorage, no reload;
+  Simple explains the same real data in sentences, Quant preserves every raw field
+- Overview page: plain-language health, research-database stats
+  (`GET /api/overview`), capabilities done vs not-implemented, prominent
+  "historical research only" notice
+- Activity: sentence-based event cards with "See details" breakdowns, exact
+  confidence wording, unknown-quote wording, accessible Re-sync confirmation
+  modal, summary cards (`GET /api/activity/summary` — counts only, no
+  performance metrics)
+- Wallets/Tokens: beginner explanations, import steps + large-file
+  confirmation, dev-seed records hidden by default (`includeDev=false` param)
+- Help page: ~28-term glossary + privacy and safety rules
+- 29 frontend tests (vitest + jsdom + Testing Library), all offline
+- "Coming later" items (Signals, Coin Analyzer, Backtesting, Wallet
+  Intelligence, Alerts) visibly disabled — no fake data anywhere
+
+### ✅ Phase 1D-B1 — Current token market snapshots (complete)
+
+- Provider-neutral market-data architecture (`providers/market/`) with a
+  `MarketDataProvider` interface and dependency injection for tests
+- DexScreener provider (public `tokens/v1` endpoint, no API key, 300 req/min);
+  exact decimal strings preserved, sanitized typed errors, bounded
+  timeout/retry with Retry-After handling
+- Deterministic pair-selection policy (Solana-only, contains the mint, highest
+  liquidity → volume → recency → quote preference → address tie-break); handles
+  the requested token appearing as base or quote without inventing prices
+- Additive migration `token_market_snapshots`: `TokenMarketSnapshot` +
+  `TokenMarketRefreshRun`; market cap and FDV stored strictly separately
+- Manual bounded refresh (max 20 tokens, 1–5 recommended, dev tokens excluded
+  by default), per-token failure isolation, refresh lock, auditable run totals
+- Centralized freshness (`FRESH`/`AGING`/`STALE`/`NEVER_FETCHED`/`UNKNOWN`)
+  computed from observation time — manual snapshots never called "live"
+- Routes: `POST /api/token-metrics/refresh`, `GET /api/token-metrics`,
+  `GET /api/token-metrics/:mint/latest`, `.../snapshots`, `.../refresh-runs/:id`;
+  Tokens API `withMarket`/`marketData`/`sort`; Overview market summary
+- Tokens page: Simple Mode market cards with plain-language field explanations,
+  Quant Mode exact-decimal technical table, selection controls; Overview market
+  cards. No recommendations, scores, or predictions.
+
+### ⏭ Phase 1D-B2 — Historical OHLCV and post-entry outcomes (next)
+
+- Historical OHLCV candle collection and bounded backfilling
+- Post-wallet-entry market outcomes (price after a tracked wallet's entry)
+- Periodic/scheduled snapshotting (out of scope for 1D-B1's manual model)
 - Stage classification rules (`FINAL_STRETCH`, `MIGRATED`)
-- Token metadata enrichment (names/symbols for activity-discovered tokens)
 
 ### Phase 2 — Wallet ranking
 

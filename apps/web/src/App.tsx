@@ -1,45 +1,77 @@
-import { useState } from 'react';
-import { StatusPage } from './pages/StatusPage';
+import { useEffect, useState } from 'react';
+import { ModeProvider } from './lib/mode';
+import { PAGES, Sidebar, type PageId } from './components/Sidebar';
+import { ModeToggle } from './components/ModeToggle';
+import { OverviewPage } from './pages/OverviewPage';
 import { WalletsPage } from './pages/WalletsPage';
-import { TokensPage } from './pages/TokensPage';
 import { ActivityPage } from './pages/ActivityPage';
+import { TokensPage } from './pages/TokensPage';
+import { HelpPage } from './pages/HelpPage';
 
-type Tab = 'status' | 'wallets' | 'tokens' | 'activity';
+function pageFromHash(): PageId {
+  const hash = window.location.hash.replace(/^#\/?/, '');
+  return (PAGES.some((p) => p.id === hash) ? hash : 'overview') as PageId;
+}
 
 export function App() {
-  const [tab, setTab] = useState<Tab>('status');
+  return (
+    <ModeProvider>
+      <Shell />
+    </ModeProvider>
+  );
+}
+
+function Shell() {
+  const [page, setPage] = useState<PageId>(() => pageFromHash());
+
+  useEffect(() => {
+    const onHash = () => setPage(pageFromHash());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const navigate = (next: PageId) => {
+    window.location.hash = `/${next}`;
+    setPage(next);
+  };
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>Memecoin Lab</h1>
-        <span className="phase">Phase 1A — research &amp; paper-trading foundation (local only)</span>
-      </header>
+    <div className="layout">
+      <Sidebar page={page} onNavigate={navigate} />
 
-      <nav className="tabs">
-        <button className={tab === 'status' ? 'active' : ''} onClick={() => setTab('status')}>
-          System status
-        </button>
-        <button className={tab === 'wallets' ? 'active' : ''} onClick={() => setTab('wallets')}>
-          Tracked wallets
-        </button>
-        <button className={tab === 'tokens' ? 'active' : ''} onClick={() => setTab('tokens')}>
-          Tokens
-        </button>
-        <button className={tab === 'activity' ? 'active' : ''} onClick={() => setTab('activity')}>
-          Activity
-        </button>
-      </nav>
+      <div className="content">
+        <div className="topbar">
+          <div className="topbar-row">
+            <span className="brand-name">Memecoin Lab</span>
+            <ModeToggle />
+          </div>
+          <nav className="top-nav" aria-label="Main navigation">
+            {PAGES.map((p) => (
+              <button
+                key={p.id}
+                className={`nav-item ${page === p.id ? 'active' : ''}`}
+                aria-current={page === p.id ? 'page' : undefined}
+                onClick={() => navigate(p.id)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </nav>
+        </div>
 
-      {tab === 'status' && <StatusPage />}
-      {tab === 'wallets' && <WalletsPage />}
-      {tab === 'tokens' && <TokensPage />}
-      {tab === 'activity' && <ActivityPage />}
+        <main className="content-inner">
+          {page === 'overview' && <OverviewPage />}
+          {page === 'wallets' && <WalletsPage />}
+          {page === 'activity' && <ActivityPage />}
+          {page === 'tokens' && <TokensPage />}
+          {page === 'help' && <HelpPage />}
 
-      <p className="footer-note">
-        Read-only research tooling. This app never asks for private keys or seed phrases and never
-        signs transactions.
-      </p>
+          <p className="footer-note">
+            Historical research only. This app never asks for private keys or seed phrases, never
+            signs transactions, and never trades.
+          </p>
+        </main>
+      </div>
     </div>
   );
 }
