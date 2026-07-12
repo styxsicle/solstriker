@@ -200,6 +200,7 @@ Migrations: `20260711012659_init`, `20260711031157_wallet_activity`,
 | `GET /api/wallet-strategies/:walletId` | Latest completed fingerprint + pattern rows (404 `strategy_fingerprint_not_found`) |
 | `GET /api/wallet-strategies/:walletId/patterns` | Same, filterable by `patternType` |
 | `GET /api/wallet-strategy-runs/:id` | Historical audit run detail |
+| `POST /api/focus-wallets/prepare` | Body `{ walletIds: string[] (1–5), syncTransactionLimit? (default 500), continueHistoricalSync?, forceRefresh? }`. User-triggered only. Orchestrates `syncWallet` → `reconstructWallets` → `analyzeWallets` → `analyzeStrategies` sequentially per wallet, reusing each service function directly (no HTTP self-calls, no duplicated math, no new migration). Per-stage skip-when-current logic; later stages `NOT_STARTED` when an earlier required stage failed; per-wallet in-process lock (409 `wallet_prepare_in_progress`); per-wallet failure isolation (a defense-in-depth catch in the batch loop guarantees one wallet's failure can never abort the others) |
 
 There is deliberately **no** ranking, leaderboard, top-wallet, best-wallet or
 ownership-inference endpoint, and none may be added.
@@ -554,6 +555,45 @@ horizontally. Missing values show "unknown", never zero.
 **Phase 2C-B — Related-wallet funding relationships, shared-entry timing
 evidence, leader/follower sequencing, and non-accusatory relationship
 heuristics.** Do not begin it implicitly.
+
+## One-click Focus Wallet Preparation implementation notes
+
+- No migration: `apps/api/src/services/focusWallets/{prepareWallets,prepareLock}.ts`
+  are a pure orchestration layer calling `syncWallet`, `reconstructWallets`,
+  `analyzeWallets` and `analyzeStrategies` directly — never their HTTP routes,
+  never a duplicated calculation.
+- Each stage's "already current" check queries the wallet-scoped latest
+  completed record directly (not the existing all-wallets `latestXByWallet`
+  helpers, which would be wasted work for a single wallet): reconstruction is
+  current when `includedEventCount + excludedEventCount` summed over the run's
+  positions equals the wallet's current stored-event count; quality is current
+  when its `reconstructionRunId` matches; fingerprint is current when both its
+  `reconstructionRunId` and `qualityMetricSetId` match.
+- **Sync-skip design decision**: once a wallet's backfill is complete, sync is
+  skipped as `already_current` unless `forceRefresh` or `continueHistoricalSync`
+  is set. An earlier draft always re-attempted sync when already backfilled
+  (to auto-catch-up on new activity), but that made the "skip when nothing
+  changed" case impossible to distinguish from "there might be something new" —
+  a real design conflict caught by a failing test, not a bug. The checkbox is
+  the user's explicit signal to check again.
+- Two Prisma-delegate test caveats confirmed again here (see also the Phase
+  2C-A note): `vi.spyOn(prisma.X, 'method').mockRestore()` does not truly
+  restore Prisma's proxy-generated method — it leaves it permanently broken.
+  Tests needing a working client after a mocked failure use a **fresh**
+  `buildTestApp()` sharing the same test database, not `mockRestore()`.
+- Locks: the new per-wallet `prepareLock` (a `Set<string>`) is acquired for
+  *every* requested wallet before any processing starts and released in the
+  route's `finally`; it is distinct from each stage's own global single-flight
+  lock (`tryAcquireReconstructionLock` etc.), which is acquired/released once
+  per wallet per stage inside the sequential loop.
+- Verification: shared 22, API 249, frontend 97 = **368 tests**; lint and
+  build pass. No new migration, so `prisma/dev.db` model counts were expected
+  to stay untouched by this work — a live dev server left running by the user
+  during this session (not started by the assistant) synchronized two `bn`-
+  labelled wallets independently, which is the explicitly anticipated
+  "unless the user manually runs preparation later" exception; reconstruction/
+  quality/fingerprint run counts were unaffected, and `PRAGMA integrity_check`
+  remained `ok`.
 
 ## Phase 2C-A implementation notes
 

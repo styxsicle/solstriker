@@ -533,3 +533,12 @@ details.descriptor .market-grid { margin-top: 8px; }
   .fingerprint-grid { grid-template-columns: minmax(0, 1fr); }
   .wallet-choice, .pattern-list li { flex-direction: column; align-items: flex-start; }
 }
+
+/* ---------- One-click Focus Wallet Preparation ---------- */
+.prepare-results { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.prepare-result-card h4 { margin: 0 0 4px; }
+.prepare-stage-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 10px; }
+.prepare-stage { display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-2); min-width: 0; }
+.prepare-stage-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.prepare-stage-reason { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+@media (max-width: 640px) { .prepare-stage-row { grid-template-columns: minmax(0, 1fr); } }

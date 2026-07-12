@@ -17,6 +17,7 @@ import { registerWalletPositionRoutes } from './routes/walletPositions.js';
 import { registerWalletQualityRoutes } from './routes/walletQuality.js';
 import { registerFocusCohortRoutes } from './routes/focusCohorts.js';
 import { registerWalletStrategyRoutes } from './routes/walletStrategies.js';
+import { registerFocusWalletRoutes } from './routes/focusWallets.js';
 import type { SyncWalletOptions } from './services/activity/syncWallet.js';
 import { runDevSeed } from './services/seed.js';
 
@@ -77,6 +78,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerFocusCohortRoutes(app, prisma);
   registerWalletStrategyRoutes(app, prisma);
   registerActivityRoutes(app, {
+    prisma,
+    provider: deps.activityProvider,
+    syncOptions: deps.syncOptions,
+  });
+  registerFocusWalletRoutes(app, {
     prisma,
     provider: deps.activityProvider,
     syncOptions: deps.syncOptions,

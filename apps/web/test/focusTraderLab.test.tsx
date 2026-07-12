@@ -54,6 +54,11 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Focus Trader Lab — cohort setup', () => {
+  // The page also renders the Prepare Wallet Research picker (same wallet
+  // labels, its own checkboxes), so cohort-setup queries are scoped to the
+  // "Focus cohort setup" region rather than the whole screen.
+  const cohortSetup = () => within(screen.getByRole('region', { name: 'Focus cohort setup' }));
+
   it('shows the page subtitle, the ownership disclaimer and the shared-label warning', async () => {
     stub();
     view();
@@ -68,50 +73,50 @@ describe('Focus Trader Lab — cohort setup', () => {
       ),
     ).toBeTruthy();
     expect(screen.getByText(/Similar labels do not prove that wallets share an owner\./)).toBeTruthy();
-    await waitFor(() => expect(screen.getByText(/bn trezor/)).toBeTruthy());
+    await waitFor(() => expect(cohortSetup().getByText(/bn trezor/)).toBeTruthy());
   });
 
   it('searches labels and addresses without auto-adding any wallet', async () => {
     stub();
     view();
-    await waitFor(() => expect(screen.getByText(/unrelated research wallet/)).toBeTruthy());
-    fireEvent.change(screen.getByLabelText('Search tracked wallets'), { target: { value: 'bn' } });
-    expect(screen.getByText(/bn trezor/)).toBeTruthy();
-    expect(screen.queryByText(/unrelated research wallet/)).toBeNull();
+    await waitFor(() => expect(cohortSetup().getByText(/unrelated research wallet/)).toBeTruthy());
+    fireEvent.change(cohortSetup().getByLabelText('Search tracked wallets'), { target: { value: 'bn' } });
+    expect(cohortSetup().getByText(/bn trezor/)).toBeTruthy();
+    expect(cohortSetup().queryByText(/unrelated research wallet/)).toBeNull();
     // Nothing was selected merely because the labels matched "bn".
-    expect(screen.getByText('0 primary · 0 / 9 comparison wallets')).toBeTruthy();
-    expect(screen.getByText(/Select exactly one primary wallet/)).toBeTruthy();
+    expect(cohortSetup().getByText('0 primary · 0 / 9 comparison wallets')).toBeTruthy();
+    expect(cohortSetup().getByText(/Select exactly one primary wallet/)).toBeTruthy();
   });
 
   it('enforces one primary wallet and at most nine comparison wallets', async () => {
     stub();
     view();
-    await waitFor(() => expect(screen.getAllByRole('radio').length).toBe(3));
-    fireEvent.click(screen.getAllByRole('radio')[0]);
-    fireEvent.click(screen.getAllByRole('checkbox')[1]);
-    fireEvent.click(screen.getAllByRole('checkbox')[2]);
-    expect(screen.getByText('1 primary · 2 / 9 comparison wallets')).toBeTruthy();
+    await waitFor(() => expect(cohortSetup().getAllByRole('radio').length).toBe(3));
+    fireEvent.click(cohortSetup().getAllByRole('radio')[0]);
+    fireEvent.click(cohortSetup().getAllByRole('checkbox')[1]);
+    fireEvent.click(cohortSetup().getAllByRole('checkbox')[2]);
+    expect(cohortSetup().getByText('1 primary · 2 / 9 comparison wallets')).toBeTruthy();
 
     // Choosing a new primary removes it from the comparison list (never both).
-    fireEvent.click(screen.getAllByRole('radio')[1]);
-    expect(screen.getByText('1 primary · 1 / 9 comparison wallets')).toBeTruthy();
+    fireEvent.click(cohortSetup().getAllByRole('radio')[1]);
+    expect(cohortSetup().getByText('1 primary · 1 / 9 comparison wallets')).toBeTruthy();
     // The primary wallet cannot also be selected as a comparison wallet.
-    expect((screen.getAllByRole('checkbox')[1] as HTMLInputElement).disabled).toBe(true);
+    expect((cohortSetup().getAllByRole('checkbox')[1] as HTMLInputElement).disabled).toBe(true);
   });
 
   it('reorders comparison members and saves the user-defined order', async () => {
     stub();
     view();
-    await waitFor(() => expect(screen.getAllByRole('radio').length).toBe(3));
-    fireEvent.change(screen.getByLabelText('Cohort name'), { target: { value: 'Focus cohort A' } });
-    fireEvent.click(screen.getAllByRole('radio')[0]);
-    fireEvent.click(screen.getAllByRole('checkbox')[1]);
-    fireEvent.click(screen.getAllByRole('checkbox')[2]);
+    await waitFor(() => expect(cohortSetup().getAllByRole('radio').length).toBe(3));
+    fireEvent.change(cohortSetup().getByLabelText('Cohort name'), { target: { value: 'Focus cohort A' } });
+    fireEvent.click(cohortSetup().getAllByRole('radio')[0]);
+    fireEvent.click(cohortSetup().getAllByRole('checkbox')[1]);
+    fireEvent.click(cohortSetup().getAllByRole('checkbox')[2]);
 
-    const order = screen.getByRole('list', { name: '' }) ?? null;
+    const order = cohortSetup().getByRole('list', { name: '' }) ?? null;
     expect(order).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Move unrelated research wallet up' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save cohort' }));
+    fireEvent.click(cohortSetup().getByRole('button', { name: 'Move unrelated research wallet up' }));
+    fireEvent.click(cohortSetup().getByRole('button', { name: 'Save cohort' }));
 
     await waitFor(() => expect(posted.some((p) => p.url.includes('/api/focus-cohorts'))).toBe(true));
     const payload = posted.find((p) => p.url.endsWith('/api/focus-cohorts'))?.body;

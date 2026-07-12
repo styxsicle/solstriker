@@ -145,6 +145,10 @@ signing, and real trades.
   inferred from a wallet's balance); no recommended size and no copyable verdict
 - Visible Focus Trader Lab page (Simple + Quant), Overview and Help additions
 - Additive migration `20260712205856_focus_trader_strategy_lab`
+- One-click Focus Wallet Preparation (`POST /api/focus-wallets/prepare`):
+  user-triggered orchestration of sync → reconstruct → quality → fingerprint for
+  1–5 wallets, sequential, per-stage skip-when-current logic, per-wallet failure
+  isolation, no new migration (reuses existing services directly)
 
 ### ⏭ Phase 2C-B — Related-wallet funding relationships, shared-entry timing evidence, leader/follower sequencing, and non-accusatory relationship heuristics (next checkpoint)
 

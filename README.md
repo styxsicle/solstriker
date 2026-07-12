@@ -407,6 +407,38 @@ Migration `20260712205856_focus_trader_strategy_lab` (additive); models:
 `FocusTraderCohort`, `FocusTraderCohortMember`, `WalletStrategyFingerprintRun`,
 `WalletStrategyFingerprint`, `WalletStrategyPatternMetric`.
 
+### One-click Focus Wallet Preparation
+
+`POST /api/focus-wallets/prepare` orchestrates the existing pipeline — sync,
+reconstruct, quality-analyze, fingerprint — for 1–5 explicitly selected wallets,
+in order, sequentially. It is user-triggered only; it never runs on a schedule
+and never touches a wallet the caller did not select. No new migration was
+needed: it reuses `syncWallet`, `reconstructWallets`, `analyzeWallets` and
+`analyzeStrategies` directly rather than duplicating their calculations.
+
+Each stage reports `NOT_STARTED | RUNNING | COMPLETED | SKIPPED | FAILED`.
+Reconstruction/quality/fingerprint stages are skipped when the latest completed
+run already covers the current data (compared by stored-event coverage and by
+matching reconstruction/quality-set IDs) unless `forceRefresh` is true. Sync is
+skipped once a wallet's backfill is already complete unless `forceRefresh` or
+`continueHistoricalSync` is set — "Continue older history" is the user's signal
+that it's worth checking again. A wallet whose sync fails is left with
+reconstruction/quality/fingerprint `NOT_STARTED`; a wallet whose reconstruction
+fails is left with quality/fingerprint `NOT_STARTED` — later stages never run on
+top of a failed prerequisite. One wallet's failure never aborts the others in
+the same request (a defense-in-depth catch wraps each wallet's turn). A
+per-wallet in-process lock (distinct from each stage's own global lock) rejects
+a second concurrent prepare request for the same wallet with 409
+`wallet_prepare_in_progress`.
+
+The Focus Trader Lab page's **Prepare wallet research** section lets the user
+search and select up to five wallets, set a transaction limit (default 500),
+toggle "Continue older history" and "Refresh completed analysis", and confirms
+before any real synchronization begins. Progress cards show one row per stage
+per wallet with readable labels (Already current, Synchronized, Reconstructed,
+Insufficient history, Failed — retry available); a failed wallet gets a "Retry
+this wallet" action. Selected wallets persist across search-query changes.
+
 ## Development seed data
 
 `POST /api/dev/seed` (or the "Seed development data" button on the Tokens page)

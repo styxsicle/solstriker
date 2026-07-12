@@ -547,6 +547,69 @@ export interface ActivitySummary {
   legacyEvents: number;
 }
 
+// --- One-click Focus Wallet Preparation ---
+
+export type PrepareStageStatus = 'NOT_STARTED' | 'RUNNING' | 'COMPLETED' | 'SKIPPED' | 'FAILED';
+
+export interface PrepareSyncStage {
+  status: PrepareStageStatus;
+  reason: string | null;
+  error: string | null;
+  transactionsProcessed: number | null;
+  eventsCreated: number | null;
+  duplicateEvents: number | null;
+  tokensDiscovered: number | null;
+  backfillComplete: boolean | null;
+}
+export interface PrepareReconstructionStage {
+  status: PrepareStageStatus;
+  reason: string | null;
+  error: string | null;
+  reconstructionRunId: string | null;
+  positionsCreated: number | null;
+  matchesCreated: number | null;
+  warningCodes: string[];
+}
+export interface PrepareQualityStage {
+  status: PrepareStageStatus;
+  reason: string | null;
+  error: string | null;
+  qualityMetricSetId: string | null;
+  eligiblePositions: number | null;
+  excludedPositions: number | null;
+  warningCodes: string[];
+}
+export interface PrepareFingerprintStage {
+  status: PrepareStageStatus;
+  reason: string | null;
+  error: string | null;
+  fingerprintId: string | null;
+  eligibleCycleCount: number | null;
+  excludedCycleCount: number | null;
+  descriptorCodes: string[];
+  warningCodes: string[];
+}
+export interface PrepareWalletResult {
+  walletId: string;
+  address: string;
+  label: string | null;
+  storedEventCountBefore: number;
+  storedEventCountAfter: number;
+  backfillComplete: boolean;
+  sync: PrepareSyncStage;
+  reconstruction: PrepareReconstructionStage;
+  quality: PrepareQualityStage;
+  fingerprint: PrepareFingerprintStage;
+  warningCodes: string[];
+  sanitizedError: string | null;
+}
+export interface PrepareBatchResult {
+  requestedWallets: number;
+  processedWallets: number;
+  failures: number;
+  results: PrepareWalletResult[];
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { 'content-type': 'application/json' },

@@ -18,6 +18,7 @@ import {
 } from '../api';
 import { PageHeader } from '../components/PageHeader';
 import { CohortComparison, StrategyFingerprintPanel, walletName } from '../components/StrategyFingerprint';
+import { PrepareWalletPanel } from '../components/PrepareWalletPanel';
 import { useMode } from '../lib/mode';
 import { shortAddr } from '../lib/format';
 import { BANKROLL_STORAGE_KEY, DEFAULT_REFERENCE_BANKROLL_SOL } from '../lib/portability';
@@ -252,6 +253,8 @@ export function FocusTraderLabPage() {
           {status}
         </p>
       )}
+
+      <PrepareWalletPanel wallets={wallets} />
 
       <section className="panel" aria-labelledby="cohort-setup">
         <h2 id="cohort-setup">Focus cohort setup</h2>
