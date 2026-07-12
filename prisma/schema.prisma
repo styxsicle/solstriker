@@ -33,6 +33,8 @@ model TrackedWallet {
   reconstructedPositions WalletPosition[]
   behaviorProfiles WalletBehaviorProfile[]
   qualityMetricSets WalletQualityMetricSet[]
+  cohortMemberships FocusTraderCohortMember[]
+  strategyFingerprints WalletStrategyFingerprint[]
 
   @@index([group])
   @@index([enabled])
@@ -661,5 +663,212 @@ model WalletTimeWindowMetric {
   @@unique([metricSetId, windowType])
   @@index([windowType])
   @@index([windowStart, windowEnd])
+  @@index([confidence])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2C-A — Focus Trader Strategy Lab.
+//
+// A focus cohort is a USER-SELECTED research grouping of public wallets. It is
+// an organizational convenience only: membership never asserts, implies, or
+// establishes that the wallets share an owner, an operator, or any coordination.
+// Similar labels, funding transfers, shared tokens and similar timing are all
+// explicitly insufficient to establish ownership.
+//
+// Deleting a cohort removes only the cohort and its membership rows. Tracked
+// wallets, events, positions, quality records and fingerprints are never
+// touched by cohort deletion (the wallet relation intentionally has no cascade).
+// ---------------------------------------------------------------------------
+model FocusTraderCohort {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members FocusTraderCohortMember[]
+
+  @@index([name])
+  @@index([createdAt])
+}
+
+// role: PRIMARY (exactly one per cohort) | COMPARISON (zero to nine per cohort).
+// displayOrder preserves the user's own ordering — never a ranking.
+model FocusTraderCohortMember {
+  id              String   @id @default(cuid())
+  cohortId        String
+  trackedWalletId String
+  role            String   @default("COMPARISON")
+  displayOrder    Int      @default(0)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  cohort        FocusTraderCohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  trackedWallet TrackedWallet     @relation(fields: [trackedWalletId], references: [id])
+
+  @@unique([cohortId, trackedWalletId]) // a wallet appears at most once per cohort
+  @@index([cohortId, displayOrder])
+  @@index([trackedWalletId])
+  @@index([role])
+}
+
+// One manual, bounded, auditable strategy-fingerprint calculation request.
+// status: RUNNING | COMPLETED | PARTIAL | FAILED
+model WalletStrategyFingerprintRun {
+  id                    String    @id @default(cuid())
+  calculationVersion    Int       @default(1)
+  status                String    @default("RUNNING")
+  startedAt             DateTime  @default(now())
+  completedAt           DateTime?
+  requestedWalletCount  Int       @default(0)
+  processedWalletCount  Int       @default(0)
+  fingerprintCount      Int       @default(0)
+  patternCount          Int       @default(0)
+  eligibleCycleCount    Int       @default(0)
+  excludedCycleCount    Int       @default(0)
+  warningCount          Int       @default(0)
+  errorCount            Int       @default(0)
+  sanitizedErrorSummary String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  fingerprints WalletStrategyFingerprint[]
+
+  @@index([status])
+  @@index([startedAt])
+  @@index([calculationVersion])
+}
+
+// Descriptive structure of how one wallet's observed position cycles were
+// entered, sized, managed and exited. Every value is derived only from the
+// wallet's LATEST COMPLETED reconstruction (runs are never combined).
+// All financial values are exact decimal STRINGS; unknown values are NULL.
+// Nothing here measures profitability, skill, ownership or copyability.
+model WalletStrategyFingerprint {
+  id                                String   @id @default(cuid())
+  runId                             String
+  trackedWalletId                   String
+  reconstructionRunId               String
+  qualityMetricSetId                String?
+  calculationVersion                Int      @default(1)
+  status                            String
+  confidence                        String
+  // --- sample ---
+  eligibleCycleCount                Int      @default(0)
+  excludedCycleCount                Int      @default(0)
+  eligibleBuyCount                  Int      @default(0)
+  eligibleSellCount                 Int      @default(0)
+  // --- entry structure ---
+  medianBuysPerCycle                String?
+  meanBuysPerCycle                  String?
+  p25BuysPerCycle                   String?
+  p75BuysPerCycle                   String?
+  singleBuyCycleCount               Int      @default(0)
+  twoBuyCycleCount                  Int      @default(0)
+  multiBuyCycleCount                Int      @default(0)
+  medianFirstToSecondBuySeconds     String?
+  medianLaterBuyGapSeconds          String?
+  medianFirstBuySol                 String?
+  medianCycleCostSol                String?
+  p75CycleCostSol                   String?
+  medianFirstBuySharePct            String?
+  medianLargestBuySharePct          String?
+  largestBuyFirstCycleCount         Int      @default(0)
+  increasingSizeCycleCount          Int      @default(0)
+  // --- exit structure ---
+  cyclesWithSellCount               Int      @default(0)
+  medianSellsPerCycle               String?
+  singleSellCycleCount              Int      @default(0)
+  twoSellCycleCount                 Int      @default(0)
+  multiSellCycleCount               Int      @default(0)
+  medianFirstBuyToFirstSellSeconds  String?
+  medianLastBuyToFirstSellSeconds   String?
+  medianFirstSellInventoryPct       String?
+  medianLargestSellInventoryPct     String?
+  medianRemainingAfterFirstSellPct  String?
+  medianFirstSellToFinalSellSeconds String?
+  partialFirstExitCycleCount        Int      @default(0)
+  fullyClosedCycleCount             Int      @default(0)
+  openCycleCount                    Int      @default(0)
+  // --- evidence limits ---
+  transferAffectedCycleCount        Int      @default(0)
+  unmatchedSellCount                Int      @default(0)
+  unknownBasisCycleCount            Int      @default(0)
+  missingFeeCycleCount              Int      @default(0)
+  eligibleCoveragePct               String?
+  feeCoveragePct                    String?
+  completeHistory                   Boolean  @default(false)
+  // --- token repetition ---
+  distinctTokenCount                Int      @default(0)
+  repeatedTokenCount                Int      @default(0)
+  repeatedTokenCycleCount           Int      @default(0)
+  maxCyclesPerToken                 Int      @default(0)
+  medianSecondsBetweenTokenCycles   String?
+  // --- fees ---
+  medianFeePerBuySol                String?
+  medianFeePerSellSol               String?
+  medianFeePerCycleSol              String?
+  medianFeeBurdenPct                String?
+  p75FeeBurdenPct                   String?
+  feeBurdenOver1PctCount            Int      @default(0)
+  feeBurdenOver2PctCount            Int      @default(0)
+  feeBurdenOver5PctCount            Int      @default(0)
+  feeBurdenOver10PctCount           Int      @default(0)
+  medianLegsPerCycle                String?
+  // --- concurrency ---
+  observedMaxConcurrentPositions    Int      @default(0)
+  medianConcurrentPositions         String?
+  // --- descriptors ---
+  descriptorCodes                   String   @default("[]")
+  descriptorEvidenceJson            String   @default("[]")
+  warningCodes                      String   @default("[]")
+  calculatedAt                      DateTime @default(now())
+  createdAt                         DateTime @default(now())
+  updatedAt                         DateTime @updatedAt
+
+  run               WalletStrategyFingerprintRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  trackedWallet     TrackedWallet                  @relation(fields: [trackedWalletId], references: [id])
+  patterns          WalletStrategyPatternMetric[]
+
+  @@unique([runId, trackedWalletId, calculationVersion]) // idempotent per run
+  @@index([trackedWalletId])
+  @@index([runId])
+  @@index([reconstructionRunId])
+  @@index([qualityMetricSetId])
+  @@index([status])
+  @@index([confidence])
+  @@index([calculationVersion])
+  @@index([calculatedAt])
+}
+
+// One factual distribution row of a fingerprint.
+// patternType: ENTRY_COUNT | EXIT_COUNT | ENTRY_TIMING | EXIT_TIMING |
+//              HOLDING_DURATION | VENUE | ROUTER | FEE_BURDEN |
+//              TOKEN_REPETITION | POSITION_SIZE | COMPLETENESS
+// Rows are never ranked — ordering is by pattern type and stable value order.
+model WalletStrategyPatternMetric {
+  id                    String   @id @default(cuid())
+  fingerprintId         String
+  patternType           String
+  patternValue          String
+  sortOrder             Int      @default(0)
+  totalCount            Int      @default(0)
+  eligibleCount         Int      @default(0)
+  excludedCount         Int      @default(0)
+  percentage            String?
+  medianSizeSol         String?
+  medianDurationSeconds String?
+  medianRawResultSol    String?
+  confidence            String
+  warningCodes          String   @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  fingerprint WalletStrategyFingerprint @relation(fields: [fingerprintId], references: [id], onDelete: Cascade)
+
+  @@unique([fingerprintId, patternType, patternValue])
+  @@index([fingerprintId, patternType, sortOrder])
+  @@index([patternType])
   @@index([confidence])
 }

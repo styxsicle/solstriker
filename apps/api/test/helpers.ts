@@ -70,6 +70,13 @@ export async function buildTestApp(
 }
 
 export async function resetDb(prisma: PrismaClient) {
+  // Phase 2C-A rows first: cohort members and fingerprints reference TrackedWallet
+  // WITHOUT a cascade on purpose — deleting a cohort must never delete a wallet.
+  await prisma.walletStrategyPatternMetric.deleteMany();
+  await prisma.walletStrategyFingerprint.deleteMany();
+  await prisma.walletStrategyFingerprintRun.deleteMany();
+  await prisma.focusTraderCohortMember.deleteMany();
+  await prisma.focusTraderCohort.deleteMany();
   await prisma.walletTimeWindowMetric.deleteMany();
   await prisma.walletCategoryMetric.deleteMany();
   await prisma.walletQualityMetricSet.deleteMany();

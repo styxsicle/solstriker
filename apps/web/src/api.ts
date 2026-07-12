@@ -255,6 +255,180 @@ export interface OverviewResponse {
     profilesGenerated: number; latestRunStatus: string | null;
   };
   quality: { walletsAnalyzed:number; latestRunStatus:string|null; metricSetsGenerated:number; categoryMetricSetsGenerated:number; timeWindowComparisonsGenerated:number; verySmallSamples:number; smallSamples:number; moderateSamples:number; largeSamples:number; incompleteHistoryWallets:number };
+  /** Phase 2C-A counts only — never a "best" or "recommended" focus wallet. */
+  focus: { cohorts:number; cohortMembers:number; walletsWithFingerprints:number; latestRunStatus:string|null; latestRunAt:string|null; insufficientEvidenceFingerprints:number; incompleteHistoryFingerprints:number };
+}
+
+// --- Phase 2C-A: focus cohorts and strategy fingerprints ---
+
+/** Cohort membership is a USER GROUPING. It never establishes common ownership. */
+export type CohortRole = 'PRIMARY' | 'COMPARISON';
+
+export interface FocusCohortMember {
+  id: string;
+  cohortId: string;
+  trackedWalletId: string;
+  role: CohortRole;
+  displayOrder: number;
+  notes: string | null;
+  wallet: { id: string; address: string; label: string | null; emoji: string | null; source: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What a member wallet still needs before a fingerprint can be calculated. */
+export interface CohortReadiness {
+  synchronized: boolean;
+  backfillComplete: boolean;
+  syncStatus: string;
+  storedEventCount: number;
+  reconstructionRunId: string | null;
+  reconstructionStatus: string;
+  qualityMetricSetId: string | null;
+  qualityStatus: string;
+  fingerprintId: string | null;
+  fingerprintStatus: string;
+  fingerprintConfidence: string | null;
+  eligibleCycleCount: number | null;
+  missingPrerequisites: string[];
+  canAnalyze: boolean;
+}
+
+export interface FocusCohort {
+  id: string;
+  name: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+  memberCount: number;
+  members: FocusCohortMember[];
+  warningCodes: string[];
+  readiness?: Record<string, CohortReadiness>;
+}
+
+export interface StrategyPattern {
+  id: string;
+  fingerprintId: string;
+  patternType: string;
+  patternValue: string;
+  sortOrder: number;
+  totalCount: number;
+  eligibleCount: number;
+  excludedCount: number;
+  percentage: string | null;
+  medianSizeSol: string | null;
+  medianDurationSeconds: string | null;
+  medianRawResultSol: string | null;
+  confidence: string;
+  warningCodes: string[];
+}
+
+/** The audit trail behind one descriptor: formula, sample, threshold, warnings. */
+export interface DescriptorEvidence {
+  code: string;
+  formula: string;
+  numerator: number | null;
+  denominator: number | null;
+  observed: string | null;
+  threshold: string;
+  sampleCount: number;
+  confidence: string;
+  warningCodes: string[];
+}
+
+/**
+ * Observed structure of a wallet's reconstructed cycles. All financial values
+ * are EXACT DECIMAL STRINGS; null means unknown, never zero. Nothing here
+ * measures profitability, proves ownership, or recommends copying anything.
+ */
+export interface StrategyFingerprint {
+  id: string;
+  runId: string;
+  trackedWalletId: string;
+  reconstructionRunId: string;
+  qualityMetricSetId: string | null;
+  calculationVersion: number;
+  status: string;
+  confidence: string;
+  eligibleCycleCount: number;
+  excludedCycleCount: number;
+  eligibleBuyCount: number;
+  eligibleSellCount: number;
+  medianBuysPerCycle: string | null;
+  meanBuysPerCycle: string | null;
+  p25BuysPerCycle: string | null;
+  p75BuysPerCycle: string | null;
+  singleBuyCycleCount: number;
+  twoBuyCycleCount: number;
+  multiBuyCycleCount: number;
+  medianFirstToSecondBuySeconds: string | null;
+  medianLaterBuyGapSeconds: string | null;
+  medianFirstBuySol: string | null;
+  medianCycleCostSol: string | null;
+  p75CycleCostSol: string | null;
+  medianFirstBuySharePct: string | null;
+  medianLargestBuySharePct: string | null;
+  largestBuyFirstCycleCount: number;
+  increasingSizeCycleCount: number;
+  cyclesWithSellCount: number;
+  medianSellsPerCycle: string | null;
+  singleSellCycleCount: number;
+  twoSellCycleCount: number;
+  multiSellCycleCount: number;
+  medianFirstBuyToFirstSellSeconds: string | null;
+  medianLastBuyToFirstSellSeconds: string | null;
+  medianFirstSellInventoryPct: string | null;
+  medianLargestSellInventoryPct: string | null;
+  medianRemainingAfterFirstSellPct: string | null;
+  medianFirstSellToFinalSellSeconds: string | null;
+  partialFirstExitCycleCount: number;
+  fullyClosedCycleCount: number;
+  openCycleCount: number;
+  transferAffectedCycleCount: number;
+  unmatchedSellCount: number;
+  unknownBasisCycleCount: number;
+  missingFeeCycleCount: number;
+  eligibleCoveragePct: string | null;
+  feeCoveragePct: string | null;
+  completeHistory: boolean;
+  distinctTokenCount: number;
+  repeatedTokenCount: number;
+  repeatedTokenCycleCount: number;
+  maxCyclesPerToken: number;
+  medianSecondsBetweenTokenCycles: string | null;
+  medianFeePerBuySol: string | null;
+  medianFeePerSellSol: string | null;
+  medianFeePerCycleSol: string | null;
+  medianFeeBurdenPct: string | null;
+  p75FeeBurdenPct: string | null;
+  feeBurdenOver1PctCount: number;
+  feeBurdenOver2PctCount: number;
+  feeBurdenOver5PctCount: number;
+  feeBurdenOver10PctCount: number;
+  medianLegsPerCycle: string | null;
+  observedMaxConcurrentPositions: number;
+  medianConcurrentPositions: string | null;
+  descriptorCodes: string[];
+  descriptorEvidence: DescriptorEvidence[];
+  warningCodes: string[];
+  calculatedAt: string;
+  patterns?: StrategyPattern[];
+  trackedWallet?: { address: string; label: string | null; emoji: string | null };
+}
+
+export interface StrategyAnalysisResult {
+  runId: string;
+  calculationVersion: number;
+  status: string;
+  requestedWallets: number;
+  processedWallets: number;
+  fingerprintsCreated: number;
+  patternsCreated: number;
+  eligibleCycles: number;
+  excludedCycles: number;
+  warnings: number;
+  failures: number;
+  results: Array<{ walletId: string; status: string; error?: string; warningCodes: string[] }>;
 }
 
 export interface WalletTradeMatch { id:string; buyEventId:string; sellEventId:string; sequence:number; matchedTokenAmount:string; allocatedBuyCostSol:string|null; allocatedBuyFeesSol:string|null; allocatedSellProceedsSol:string|null; allocatedSellFeesSol:string|null; rawRealizedPnlSol:string|null; knownAllInRealizedPnlSol:string|null; rawRealizedRoiPct:string|null; knownAllInRealizedRoiPct:string|null; holdingDurationSeconds:number|null; confidence:string; warningCodes:string[]; calculationVersion:number }

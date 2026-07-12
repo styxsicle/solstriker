@@ -37,4 +37,17 @@ describe('Sidebar', () => {
     const intelligence = screen.getByRole('button', { name: 'Wallet Intelligence' });
     expect((intelligence as HTMLButtonElement).disabled).toBe(false);
   });
+
+  it('exposes Focus Trader Lab as a visible primary navigation page', () => {
+    const onNavigate = vi.fn();
+    render(
+      <ModeProvider>
+        <Sidebar page="overview" onNavigate={onNavigate} />
+      </ModeProvider>,
+    );
+    const focus = screen.getByRole('button', { name: 'Focus Trader Lab' });
+    expect((focus as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(focus);
+    expect(onNavigate).toHaveBeenCalledWith('focus');
+  });
 });

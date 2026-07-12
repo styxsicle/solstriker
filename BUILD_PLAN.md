@@ -128,10 +128,39 @@ signing, and real trades.
 - Stable factual categories, outcome medians and recent/older windows
 - Neutral user-ordered comparison (max 3), never a ranking
 
-### ⏭ Phase 2C — Wallet behavior archetypes, leader/follower timing evidence, related-wallet heuristics, and non-accusatory wallet classification foundations
+### ✅ Phase 2C-A — Focus Trader Strategy Lab, behavior fingerprints, focus cohorts, and 2.2 SOL portability analysis (complete)
 
-- Per-wallet historical PnL and hit-rate from recorded events
-- Ranking views; no predictions
+- Persistent user-created focus cohorts (one PRIMARY + up to nine COMPARISON
+  wallets, user-defined order, development wallets excluded). Cohort membership is
+  an organizational grouping only and never establishes common ownership; deleting
+  a cohort never deletes wallets or research data
+- Deterministic strategy fingerprints from each wallet's latest completed
+  reconstruction only: entry/exit structure, scale-in and scale-out behavior,
+  partial exits, observed remainder, timing buckets, venue/router counts, position
+  sizes, fee burden (with priority-fee double-count protection and rent excluded),
+  token repetition, and observed concurrency
+- Evidence-backed descriptors with published thresholds, formulas, sample counts,
+  confidence and warning codes — descriptive only, never evaluative
+- Local 2.2 SOL reference-bankroll portability illustrations (never stored, never
+  inferred from a wallet's balance); no recommended size and no copyable verdict
+- Visible Focus Trader Lab page (Simple + Quant), Overview and Help additions
+- Additive migration `20260712205856_focus_trader_strategy_lab`
+
+### ⏭ Phase 2C-B — Related-wallet funding relationships, shared-entry timing evidence, leader/follower sequencing, and non-accusatory relationship heuristics (next checkpoint)
+
+- Funding-transfer evidence between user-selected wallets, stated as observations
+  and never as proof of common ownership or coordination
+- Shared-entry timing evidence and leader/follower sequencing over recorded events
+- Carefully qualified, non-accusatory relationship heuristics with explicit
+  uncertainty; no insider, cabal, dev-group or manipulation classification
+
+### Phase 2C-C — Behavior archetype clustering across the larger wallet universe
+
+- Descriptive clustering of observed behavior structures; no rankings, no verdicts
+
+### Phase 2C-D — Historical strategy replay using user-sized shadow portfolios
+
+- Replay of recorded history against a user-chosen bankroll; still no execution
 
 ### Phase 3 — Rule-based signals
 
@@ -148,7 +177,17 @@ signing, and real trades.
 - Probability estimates only once enough labeled history exists
 - Backtesting over recorded (not synthetic) data
 
-### Later — Night Watch / Overnight Desk
+### Later — deliberately not implemented
 
-Candidate monitoring and overnight research plans only after live signals, FOMO
-analysis, token-risk analysis, and paper validation. Disabled and unimplemented.
+Each item below is out of scope until the phases above are complete. None of them
+exists in the codebase today:
+
+- Live focus-wallet monitoring (no WebSockets, polling, or background jobs)
+- Multi-wallet accumulation alerts
+- FOMO / early-versus-late engine
+- Token risk and bundle analysis
+- My Positions research page
+- Night Watch / Overnight Desk — candidate monitoring and overnight research plans
+  only after live signals, FOMO analysis, token-risk analysis, and paper validation
+- X / social narrative monitoring
+- Shadow alerts and paper validation

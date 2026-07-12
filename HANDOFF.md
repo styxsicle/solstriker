@@ -154,8 +154,23 @@ execution `venue`.
   (incremental cursor), `lastSyncAt?`, `lastError?` (sanitized code only),
   `totalTransactions`, `totalEvents`. Cascade-deletes with its wallet.
 
+Phase 2C-A additions (all additive):
+
+- `FocusTraderCohort`: `name` (unique), `description?`. A user-selected wallet
+  group — it never establishes common ownership.
+- `FocusTraderCohortMember`: `cohortId`, `trackedWalletId`, `role`
+  (`PRIMARY` | `COMPARISON`), `displayOrder`, `notes?`. Unique
+  `(cohortId, trackedWalletId)`. Cascades from the cohort; the wallet relation has
+  **no cascade**, so deleting a cohort can never delete a wallet.
+- `WalletStrategyFingerprintRun` / `WalletStrategyFingerprint` /
+  `WalletStrategyPatternMetric`: auditable run, one descriptive fingerprint per
+  wallet per run (unique `(runId, trackedWalletId, calculationVersion)`), and
+  factual pattern rows (unique `(fingerprintId, patternType, patternValue)`).
+  Values are exact decimal strings; unknown stays null.
+
 Migrations: `20260711012659_init`, `20260711031157_wallet_activity`,
-`..._reliable_swap_decoding` (additive only — no data was reset).
+`..._reliable_swap_decoding`, `20260712205856_focus_trader_strategy_lab`
+(additive only — no data was reset).
 
 ## API routes
 
@@ -175,6 +190,19 @@ Migrations: `20260711012659_init`, `20260711031157_wallet_activity`,
 | `GET /api/activity/status` | `providerConfigured`, `maxWalletsPerSync`, per-wallet sync states |
 | `GET /api/activity/events` | Filters `walletId`, `tokenId`, `eventType`; paginated, newest first, includes wallet + token info and all decoding/breakdown fields |
 | `POST /api/activity/resync` | Same body/validations as sync; clears ONLY the selected wallets' events + cursors (under the sync lock), then re-fetches so history is re-decoded. This is THE way to upgrade `decoderVersion: 1` rows — raw payloads are not stored, so in-place re-decoding is impossible by design (do not guess). |
+| `POST /api/focus-cohorts` | Create a user-selected wallet group: exactly one `PRIMARY`, ≤ 9 `COMPARISON`, no duplicate wallet, dev wallets rejected, unique name. Never syncs/reconstructs/analyzes. 400 `exactly_one_primary_required` / `duplicate_member` / `too_many_members` / `unknown_wallet` / `dev_wallet_excluded`, 409 `duplicate_cohort_name` |
+| `GET /api/focus-cohorts` | Paginated, stable creation order (never ordered by any result) |
+| `GET /api/focus-cohorts/:id` | Members in PRIMARY-then-user-order, plus per-member `readiness` (sync completeness, stored events, reconstruction/quality/fingerprint status, eligible cycles, `missingPrerequisites`, `canAnalyze`). Reading readiness never creates work |
+| `PATCH /api/focus-cohorts/:id` | Rename / re-note / replace membership (same rules) |
+| `DELETE /api/focus-cohorts/:id` | Deletes ONLY the cohort + its membership rows. No wallet, event, position, quality record or fingerprint is ever deleted |
+| `POST /api/wallet-strategies/analyze` | Body `{ walletIds: string[] (1–10, 1–3 recommended) }`. Requires each wallet's latest COMPLETED reconstruction; never reconstructs, syncs, re-decodes, backfills or runs quality analysis. In-process lock (409 `analysis_in_progress`), per-wallet failure isolation, sanitized 500 `strategy_analysis_failed`. Historical runs are retained |
+| `GET /api/wallet-strategies` | Latest COMPLETED fingerprint per wallet; paginated; stable `trackedWalletId` order — never a ranking |
+| `GET /api/wallet-strategies/:walletId` | Latest completed fingerprint + pattern rows (404 `strategy_fingerprint_not_found`) |
+| `GET /api/wallet-strategies/:walletId/patterns` | Same, filterable by `patternType` |
+| `GET /api/wallet-strategy-runs/:id` | Historical audit run detail |
+
+There is deliberately **no** ranking, leaderboard, top-wallet, best-wallet or
+ownership-inference endpoint, and none may be added.
 
 ## Important files
 
@@ -523,9 +551,67 @@ horizontally. Missing values show "unknown", never zero.
 
 ## Exact next checkpoint
 
-**Phase 2C — Wallet behavior archetypes, leader/follower timing evidence,
-related-wallet heuristics, and non-accusatory wallet classification foundations.**
-Do not begin it implicitly.
+**Phase 2C-B — Related-wallet funding relationships, shared-entry timing
+evidence, leader/follower sequencing, and non-accusatory relationship
+heuristics.** Do not begin it implicitly.
+
+## Phase 2C-A implementation notes
+
+- Migration `20260712205856_focus_trader_strategy_lab` (additive; zero DROP or
+  DELETE statements). Models: `FocusTraderCohort`, `FocusTraderCohortMember`,
+  `WalletStrategyFingerprintRun`, `WalletStrategyFingerprint`,
+  `WalletStrategyPatternMetric`.
+- **Ownership is never established.** A cohort is a user-selected wallet group.
+  Similar labels, shared funding, shared tokens and similar timing are all
+  explicitly insufficient; every cohort response carries `OWNERSHIP_NOT_ESTABLISHED`
+  (plus `POSSIBLE_SHARED_LABEL_ONLY` when members share a label prefix). The words
+  insider, cabal, dev group, sniper, whale and coordinated manipulation appear
+  nowhere in the product surface.
+- `FocusTraderCohortMember.trackedWalletId` and
+  `WalletStrategyFingerprint.trackedWalletId` deliberately have **no cascade**, so
+  a cohort can never delete a wallet. (`resetDb` in `apps/api/test/helpers.ts`
+  therefore clears the Phase 2C-A tables before `TrackedWallet`.)
+- `services/walletStrategies/fingerprint.ts` is a pure, deterministic calculator
+  (`decimal.js`, exact decimal strings, null never coerced to zero). Cycles come
+  from `WalletPosition.includedEventIdsJson` resolved against `WalletEvent`, using
+  each wallet's **latest completed** reconstruction only — runs are never combined.
+- **Closure is judged from observed inventory, not the status label.** With an
+  incomplete backfill every position is stamped `INCOMPLETE_HISTORY`, so defining
+  "fully closed" as `status === 'CLOSED'` made fully-sold cycles look like ones the
+  wallet "left open" (it produced a false `OFTEN_LEAVES_INVENTORY_OPEN` on real
+  data). `fullyClosed = sells ≥ 1 && openTokenAmount === 0`; a regression test pins
+  this.
+- Fees = network + platform/router + tip. The priority fee is already inside the
+  network fee and is **not** added again; rent is refundable and is not a trading
+  loss. Any unknown component leaves the cycle's fees null.
+- Descriptor thresholds live in `services/walletStrategies/descriptors.ts` and each
+  emitted descriptor stores its formula, numerator/denominator, observed value,
+  threshold, sample count, confidence and warnings in `descriptorEvidenceJson`.
+- The 2.2 SOL reference bankroll is frontend-local (`lib/portability.ts`,
+  `localStorage`) and is **never** persisted. The app does not know a wallet's
+  historical bankroll and never infers allocation percentage from a balance.
+- Analysis is bounded: explicit IDs, 1–10 wallets, duplicates/dev wallets rejected,
+  in-process lock (released in `finally`), per-wallet failure isolation, sanitized
+  500s (`strategy_analysis_failed`). Reads expose only the latest completed
+  fingerprint per wallet; historical runs stay addressable by ID. No ranking,
+  leaderboard, top-wallet or ownership-inference endpoint exists.
+- Verification: shared 22, API 231, frontend 86 = **339 tests**; lint and build
+  pass; `PRAGMA integrity_check` and `foreign_key_check` both ok.
+- Manual verification (2026-07-12): searched labels beginning with `bn` through the
+  normal API — 15 such wallets exist, **none has any synchronized activity or
+  reconstruction**. Created exactly one cohort (`bn trezor` primary + 4 `bn`
+  comparisons); readiness correctly reported `NOT_SYNCHRONIZED` /
+  `NO_COMPLETED_RECONSTRUCTION` for all five and the analyze request was **refused**
+  (`reconstruction_required`) rather than fabricating a fingerprint. A real
+  fingerprint was calculated only for `mr phoof`, the one wallet with completed
+  prerequisites: 11 eligible / 17 excluded cycles, 25 pattern rows, MEDIUM
+  confidence, descriptors `MOSTLY_SINGLE_ENTRY` (9/11), `MOSTLY_SINGLE_EXIT` (8/8),
+  `MOSTLY_SHORT_OBSERVED_HOLDS` (6/8), `VENUE_CONCENTRATED` (11/11),
+  `POSITION_SIZES_CONCENTRATED`, `FEE_SENSITIVE_AT_SMALLER_BANKROLL` (1.539% median
+  burden), `INCOMPLETE_HISTORY_SAMPLE`, `TRANSFER_AFFECTED_SAMPLE`. No wallet was
+  synced, re-decoded, reconstructed or re-analyzed; original labels are unchanged.
+  API routes were exercised over real HTTP and the Vite dev server served the new
+  page module; detailed UI interaction is jsdom-tested, **not** browser-automated.
 
 ## Phase 2B implementation notes
 

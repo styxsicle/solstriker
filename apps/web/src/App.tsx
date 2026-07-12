@@ -8,6 +8,7 @@ import { ActivityPage } from './pages/ActivityPage';
 import { TokensPage } from './pages/TokensPage';
 import { HelpPage } from './pages/HelpPage';
 import { WalletIntelligencePage } from './pages/WalletIntelligencePage';
+import { FocusTraderLabPage } from './pages/FocusTraderLabPage';
 
 function pageFromHash(): PageId {
   const hash = window.location.hash.replace(/^#\/?/, '');
@@ -66,6 +67,7 @@ function Shell() {
           {page === 'activity' && <ActivityPage />}
           {page === 'tokens' && <TokensPage />}
           {page === 'intelligence' && <WalletIntelligencePage />}
+          {page === 'focus' && <FocusTraderLabPage />}
           {page === 'help' && <HelpPage />}
 
           <p className="footer-note">

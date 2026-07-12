@@ -195,6 +195,26 @@ const GLOSSARY: { group: string; terms: Term[] }[] = [
       { term: 'Evidence confidence', definition: 'How complete and reliable the supporting sample is; it does not predict future results.' },
     ],
   },
+  {
+    group: 'Focus trader research',
+    terms: [
+      { term: 'Focus trader', definition: 'A public wallet the user has chosen to study in detail. Choosing a wallet says nothing about who controls it.' },
+      { term: 'Focus cohort', definition: 'A user-selected group of public wallets studied together. It is an organizational grouping only and does not establish that the wallets are related.' },
+      { term: 'Primary wallet', definition: 'The one wallet in a cohort whose observed behavior is described in detail. Exactly one primary wallet exists per cohort.' },
+      { term: 'Comparison wallet', definition: 'Another wallet in the cohort shown beside the primary wallet for neutral, descriptive comparison — never a ranking.' },
+      { term: 'Strategy fingerprint', definition: 'A description of how a wallet appears to enter, size, manage and exit its observed position cycles. It does not measure profitability or predict anything.' },
+      { term: 'Position cycle', definition: 'One reconstructed round trip in a token: from the first known buy until the observed inventory is gone. A wallet can have several cycles in the same token.' },
+      { term: 'Scale in', definition: 'Buying the same token more than once within one cycle. The app records this as observed scale-in behavior, not as proof of conviction.' },
+      { term: 'Scale out', definition: 'Selling a position in more than one sale within one cycle.' },
+      { term: 'Partial exit', definition: 'A sell that removed only part of the observed inventory, leaving some tokens held.' },
+      { term: 'Observed inventory', definition: 'The token amount the app can see a wallet holding from synchronized history. Tokens acquired outside that history are unknown.' },
+      { term: 'Fee burden', definition: 'Known attributable fees as a percentage of the known cost of a position. Because per-transaction fees stay roughly constant, the same structure costs a larger share of a smaller position.' },
+      { term: 'Portability illustration', definition: 'A local comparison of observed position sizes and fees against your own reference bankroll (default 2.2 SOL). It is not a recommended position size and not a verdict that a strategy can be copied.' },
+      { term: 'Incomplete history', definition: 'Only part of a wallet’s past activity has been synchronized, so early entries or later exits may be missing from every figure shown.' },
+      { term: 'Cohort evidence', definition: 'The synchronized, reconstructable data behind each cohort member. Members with missing prerequisites are shown as missing, never filled in automatically.' },
+      { term: 'Ownership uncertainty', definition: 'Similar labels, shared funding, shared tokens and similar timing do not prove that wallets share an owner. This app never claims common ownership.' },
+    ],
+  },
 ];
 
 export function HelpPage() {

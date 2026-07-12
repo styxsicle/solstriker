@@ -1,6 +1,6 @@
 import { ModeToggle } from './ModeToggle';
 
-export type PageId = 'overview' | 'wallets' | 'activity' | 'tokens' | 'intelligence' | 'help';
+export type PageId = 'overview' | 'wallets' | 'activity' | 'tokens' | 'intelligence' | 'focus' | 'help';
 
 export const PAGES: { id: PageId; label: string; icon: string }[] = [
   { id: 'overview', label: 'Overview', icon: '◎' },
@@ -8,6 +8,7 @@ export const PAGES: { id: PageId; label: string; icon: string }[] = [
   { id: 'activity', label: 'Activity', icon: '↯' },
   { id: 'tokens', label: 'Tokens', icon: '❖' },
   { id: 'intelligence', label: 'Wallet Intelligence', icon: '⌁' },
+  { id: 'focus', label: 'Focus Trader Lab', icon: '◉' },
   { id: 'help', label: 'Help', icon: '✚' },
 ];
 

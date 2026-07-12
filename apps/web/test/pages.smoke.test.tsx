@@ -49,6 +49,7 @@ const RESPONSES: Record<string, unknown> = {
     },
     positions: { walletsReconstructed: 0, totalPositions: 0, closedPositions: 0, openPositions: 0, incompletePositions: 0, totalMatches: 0, profilesGenerated: 0, latestRunStatus: null },
     quality: { walletsAnalyzed: 0, latestRunStatus: null, metricSetsGenerated: 0, categoryMetricSetsGenerated: 0, timeWindowComparisonsGenerated: 0, verySmallSamples: 0, smallSamples: 0, moderateSamples: 0, largeSamples: 0, incompleteHistoryWallets: 0 },
+    focus: { cohorts: 2, cohortMembers: 5, walletsWithFingerprints: 1, latestRunStatus: 'COMPLETED', latestRunAt: '2026-07-12T00:00:00.000Z', insufficientEvidenceFingerprints: 0, incompleteHistoryFingerprints: 1 },
   },
   '/api/wallets': { items: [], page: 1, pageSize: 50, total: 0, stats: { total: 10, enabled: 9 }, groups: [] },
   '/api/activity/status': { providerConfigured: true, maxWalletsPerSync: 10, items: [] },
@@ -143,5 +144,44 @@ describe('page smoke rendering', () => {
     expect(screen.getByText('Evidence confidence')).toBeTruthy();
     expect(screen.getByText('Pump.fun')).toBeTruthy();
     expect(screen.getByText(/cannot sign\s*or submit transactions/)).toBeTruthy();
+  });
+
+  it('Help page defines the focus-trader research terms neutrally', () => {
+    withMode('simple', <HelpPage />);
+    for (const term of [
+      'Focus trader',
+      'Focus cohort',
+      'Primary wallet',
+      'Comparison wallet',
+      'Strategy fingerprint',
+      'Scale in',
+      'Scale out',
+      'Partial exit',
+      'Observed inventory',
+      'Position cycle',
+      'Fee burden',
+      'Portability illustration',
+      'Incomplete history',
+      'Cohort evidence',
+      'Ownership uncertainty',
+    ]) {
+      expect(screen.getByText(term)).toBeTruthy();
+    }
+    expect(
+      screen.getByText(/Similar labels, shared funding, shared tokens and similar timing do not prove/),
+    ).toBeTruthy();
+    expect(screen.getByText(/not a recommended position size and not a verdict/)).toBeTruthy();
+  });
+
+  it('Overview shows focus-research counts without naming a best wallet', async () => {
+    withMode('simple', <OverviewPage />);
+    await waitFor(() => expect(screen.getByText('Focus trader research')).toBeTruthy());
+    expect(screen.getByText('Focus cohorts created')).toBeTruthy();
+    expect(screen.getByText('Focus-wallet members')).toBeTruthy();
+    expect(screen.getByText('Wallets with strategy fingerprints')).toBeTruthy();
+    expect(screen.getByText('Insufficient evidence')).toBeTruthy();
+    expect(screen.getByText('Incomplete-history fingerprints')).toBeTruthy();
+    expect(screen.getByText(/No wallet is ranked, recommended or called best\./)).toBeTruthy();
+    expect(screen.queryByText(/best focus trader|most profitable|highest-quality/i)).toBeNull();
   });
 });

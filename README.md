@@ -297,6 +297,116 @@ comparison using the local 2.2 SOL reference bankroll. Migration:
 `20260712180143_wallet_quality_metrics`; models: `WalletQualityAnalysisRun`,
 `WalletQualityMetricSet`, `WalletCategoryMetric`, `WalletTimeWindowMetric`.
 
+## Focus Trader Strategy Lab (Phase 2C-A)
+
+The **Focus Trader Lab** page studies how user-selected public wallets appear to
+enter, size, manage and exit observed positions. It describes observed behavior
+only: it never ranks wallets, never claims profitability, never classifies anyone
+as an insider/dev/sniper/whale, and never recommends following or copying a wallet.
+
+### Ownership uncertainty (non-negotiable)
+
+A **focus cohort** is a *user-selected wallet group*. Membership is an
+organizational convenience and nothing more. The app never claims two wallets
+share an owner because their labels are similar, because they were saved
+together, because they transfer funds, because they trade the same tokens, or
+because their timing is similar. Cohort responses always carry
+`OWNERSHIP_NOT_ESTABLISHED`, plus `POSSIBLE_SHARED_LABEL_ONLY` when members share
+a label prefix. Wording is limited to *focus cohort*, *user-selected wallet
+group*, *possibly related*, *similar observed behavior* and *shared timing
+evidence*.
+
+Cohort rules: exactly one `PRIMARY` wallet, zero to nine `COMPARISON` wallets
+(ten members maximum), no duplicate wallet per cohort, development wallets
+excluded, user-defined member order preserved. Creating a cohort never
+synchronizes, reconstructs or analyzes anything. **Deleting a cohort deletes only
+the cohort and its membership rows** — no tracked wallet, event, position,
+quality record or fingerprint is ever removed (the wallet relation deliberately
+has no cascade).
+
+### Strategy fingerprints
+
+A fingerprint is calculated from a wallet's **latest completed** FIFO
+reconstruction (plus its behavior profile, and its latest completed quality
+metric set when one exists). Runs are never combined, and analysis never
+reconstructs, syncs, re-decodes or backfills anything. A cycle is *eligible* when
+it has at least one buy with a known SOL cost; everything else is counted as
+excluded rather than guessed.
+
+Measured per wallet: buys per cycle (median/mean/P25/P75, one/two/three-or-more
+splits), first-to-second buy delay and later scale-in gaps, first-buy and
+largest-buy share of known cycle cost, sells per cycle, first-sell share of
+observed inventory, remainder after the first sell, partial first exits,
+first-buy→first-sell and last-buy→first-sell timing, first-sell→final-sell span,
+cycle duration, venue and router counts, position-size buckets, fee burden
+(median, P75, and counts above 1/2/5/10%), token repetition, and observed
+concurrency. Timing uses neutral buckets (under 1m, 1–5m, 5–15m, 15–30m, 30–60m,
+1–4h, 4–24h, over 24h, unknown/open).
+
+Fees count network + platform/router + tip. The priority fee is **not** added
+separately (it is already inside the network fee — double-count protection), and
+refundable token-account rent is not treated as a trading loss. A cycle with any
+unknown fee component is left `null`, never zero.
+
+Closure is judged from **observed inventory**, not from a position's status
+label: a wallet with an incomplete backfill has every position stamped
+`INCOMPLETE_HISTORY`, so a fully-sold cycle would otherwise be miscounted as one
+the wallet "left open".
+
+### Descriptors and thresholds
+
+Descriptors are structural, never evaluative — multiple buys are *observed
+scale-in behavior*, not "conviction", and an open remainder is an *observed
+remainder after the first sell*, not a "moonbag". Each one expands in the UI to
+show its formula, numerator/denominator, observed value, threshold, sample count,
+confidence and warnings. Thresholds: minimum 5 eligible cycles; "mostly" ≥ 60%;
+"frequently" ≥ 40%; venue concentrated ≥ 70% / diversified < 50%; size
+concentrated when P75÷P25 ≤ 2 and varied when ≥ 4; short holds < 30 min, longer
+holds ≥ 4 h; fee sensitivity at a median burden ≥ 1%.
+
+Confidence (`HIGH`/`MEDIUM`/`LOW`) describes **evidence completeness only** —
+never profitability. Warning codes: `INCOMPLETE_WALLET_HISTORY`,
+`NO_COMPLETED_RECONSTRUCTION`, `NO_QUALITY_ANALYSIS`, `VERY_SMALL_CYCLE_SAMPLE`,
+`SMALL_CYCLE_SAMPLE`, `LOW_ELIGIBLE_COVERAGE`, `TRANSFER_AFFECTED_CYCLES`,
+`UNMATCHED_SELLS_PRESENT`, `UNKNOWN_BASIS`, `MISSING_FEES`,
+`MIXED_EVENT_CONFIDENCE`, `MULTI_LEG_FEE_SENSITIVITY`,
+`PORTABILITY_SAMPLE_TOO_SMALL`, `CURRENT_BALANCE_NOT_HISTORICAL`,
+`POSSIBLE_SHARED_LABEL_ONLY`, `OWNERSHIP_NOT_ESTABLISHED`.
+
+### 2.2 SOL reference-bankroll portability
+
+The reference bankroll defaults to **2.2 SOL**, is stored in `localStorage` only,
+and is **never** written to the database. No wallet is connected and no balance is
+fetched. The lab shows the wallet's observed absolute SOL sizes against that
+bankroll, the capital a median position / two positions / the observed maximum
+concurrency would use, and — because per-transaction fees stay roughly constant in
+SOL — the fee burden of the same structure at positions sized to 5%, 10% and 25%
+of the bankroll.
+
+The app **does not know a wallet's historical total bankroll at the time of each
+trade**, so it never infers what percentage of their capital a trade represented
+and never scales whale sizes by raw SOL. Any current balance shown in future would
+be current only, would not prove trading profit, and could be moved by deposits and
+transfers. Neutral states: `SUFFICIENT_SAMPLE`, `LIMITED_SAMPLE`, `COST_SENSITIVE`,
+`MULTI_LEG_COST_SENSITIVE`, `CAPITAL_INTENSIVE`, `STRUCTURALLY_SIMPLE`,
+`INCOMPLETE_EVIDENCE`, `UNAVAILABLE`. There is no recommended size, no "safe" size,
+and no copyable/not-copyable verdict.
+
+### Routes and migration
+
+`POST/GET /api/focus-cohorts`, `GET/PATCH/DELETE /api/focus-cohorts/:id`,
+`POST /api/wallet-strategies/analyze` (explicit wallet IDs, 1–10, duplicates and
+development wallets rejected, in-process lock, per-wallet failure isolation,
+sanitized errors), `GET /api/wallet-strategies`,
+`GET /api/wallet-strategies/:walletId`,
+`GET /api/wallet-strategies/:walletId/patterns` (filterable by `patternType`), and
+`GET /api/wallet-strategy-runs/:id`. There is deliberately **no** ranking,
+leaderboard, top-wallet or ownership-inference endpoint.
+
+Migration `20260712205856_focus_trader_strategy_lab` (additive); models:
+`FocusTraderCohort`, `FocusTraderCohortMember`, `WalletStrategyFingerprintRun`,
+`WalletStrategyFingerprint`, `WalletStrategyPatternMetric`.
+
 ## Development seed data
 
 `POST /api/dev/seed` (or the "Seed development data" button on the Tokens page)

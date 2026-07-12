@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import { freshnessOf, USABLE_SNAPSHOT_STATUSES } from '../services/tokenMetrics/freshness.js';
 import { latestCompletedRunByWallet } from '../services/walletPositions/latestRuns.js';
 import { latestQualityMetricSetByWallet } from '../services/walletQuality/latestRuns.js';
+import { latestFingerprintByWallet } from '../services/walletStrategies/latestRuns.js';
 
 /** Read-only research-database summary for the dashboard Overview page. */
 export function registerOverviewRoute(app: FastifyInstance, prisma: PrismaClient) {
@@ -115,6 +116,21 @@ export function registerOverviewRoute(app: FastifyInstance, prisma: PrismaClient
     ]);
     const tierCount=(tier:string)=>qualitySets.filter(s=>s.sampleSizeTier===tier).length;
 
+    // --- Phase 2C-A: focus cohorts + strategy fingerprints (read-only counts) ---
+    // Deliberately never summarizes a "best", "most profitable" or "recommended"
+    // focus wallet: these are counts of stored evidence only.
+    const latestFingerprints = await latestFingerprintByWallet(prisma);
+    const fingerprintIds = [...latestFingerprints.values()];
+    const [cohortCount, cohortMemberCount, fingerprintRows, latestStrategyRun] = await Promise.all([
+      prisma.focusTraderCohort.count(),
+      prisma.focusTraderCohortMember.count(),
+      prisma.walletStrategyFingerprint.findMany({
+        where: { id: { in: fingerprintIds } },
+        select: { status: true, confidence: true, completeHistory: true, eligibleCycleCount: true, warningCodes: true },
+      }),
+      prisma.walletStrategyFingerprintRun.findFirst({ orderBy: [{ completedAt: 'desc' }, { id: 'desc' }] }),
+    ]);
+
     return {
       wallets: { total: walletsTotal, enabled: walletsEnabled, dev: walletsDev },
       activity: { syncedWallets, storedEvents },
@@ -157,6 +173,17 @@ export function registerOverviewRoute(app: FastifyInstance, prisma: PrismaClient
         verySmallSamples: tierCount('VERY_SMALL'), smallSamples: tierCount('SMALL'),
         moderateSamples: tierCount('MODERATE'), largeSamples: tierCount('LARGE') + tierCount('VERY_LARGE'),
         incompleteHistoryWallets: qualitySets.filter(s=>!s.completeHistory).length,
+      },
+      focus: {
+        cohorts: cohortCount,
+        cohortMembers: cohortMemberCount,
+        walletsWithFingerprints: latestFingerprints.size,
+        latestRunStatus: latestStrategyRun?.status ?? null,
+        latestRunAt: latestStrategyRun?.completedAt?.toISOString() ?? null,
+        insufficientEvidenceFingerprints: fingerprintRows.filter(
+          (f) => f.status === 'INSUFFICIENT_EVIDENCE' || f.eligibleCycleCount === 0,
+        ).length,
+        incompleteHistoryFingerprints: fingerprintRows.filter((f) => !f.completeHistory).length,
       },
     };
   });

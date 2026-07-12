@@ -502,3 +502,34 @@ details.helper[open] summary { margin-bottom: 6px; }
 .category-grid, .comparison-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap: 10px; margin-top: 10px; }
 @media (max-width: 640px) { .wallet-picker { grid-template-columns: 1fr; } .position-list .market-grid { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .category-grid, .comparison-grid { grid-template-columns: minmax(0,1fr); } }
+
+/* ---------- Focus Trader Strategy Lab (Phase 2C-A) ---------- */
+.fingerprint-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-top: 12px; }
+.fingerprint-grid > .card { min-width: 0; }
+.strategy-fingerprint h3 { margin: 0 0 8px; }
+.pattern-block { margin-top: 12px; min-width: 0; }
+.pattern-block h4 { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+.pattern-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.pattern-list li {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px 16px;
+  flex-wrap: wrap; padding: 5px 8px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--panel-2); font-size: 13px;
+}
+.pattern-list li > span { min-width: 0; overflow-wrap: anywhere; }
+.wallet-choice {
+  display: flex; justify-content: space-between; align-items: center; gap: 6px 14px;
+  flex-wrap: wrap; padding: 6px 8px; border-bottom: 1px solid var(--border); min-width: 0;
+}
+.wallet-choice > span { min-width: 0; overflow-wrap: anywhere; }
+.descriptor-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+details.descriptor > summary { cursor: pointer; }
+details.descriptor .market-grid { margin-top: 8px; }
+.warning-list { list-style: none; margin: 8px 0 0; padding: 0; color: var(--muted); font-size: 13px; }
+.warning-list li { margin-top: 5px; overflow-wrap: anywhere; }
+.quant-details { margin-top: 14px; }
+.quant-details > summary { cursor: pointer; color: var(--accent); }
+.quant-details .table-wrap { margin-top: 10px; }
+@media (max-width: 640px) {
+  .fingerprint-grid { grid-template-columns: minmax(0, 1fr); }
+  .wallet-choice, .pattern-list li { flex-direction: column; align-items: flex-start; }
+}
