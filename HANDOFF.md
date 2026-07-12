@@ -1,10 +1,10 @@
 # HANDOFF
 
 Continuation notes for any coding model/agent picking up this project.
-**Current state: Phase 2A complete** (1A foundation, 1B activity ingestion,
+**Current state: Phase 2B complete** (1A foundation, 1B activity ingestion,
 1C reliable swap decoding, 1D-A beginner-friendly UI shell, 1D-B1 current token
 market snapshots, 1D-B2 historical OHLCV and entry outcomes). Do not start
-Phase 2B until the user asks.
+Phase 2C until the user asks.
 
 ## What this project is
 
@@ -523,9 +523,29 @@ horizontally. Missing values show "unknown", never zero.
 
 ## Exact next checkpoint
 
-**Phase 2B — Wallet quality metrics, category-specific performance, consistency
-analysis, and non-ranking research comparisons.**
+**Phase 2C — Wallet behavior archetypes, leader/follower timing evidence,
+related-wallet heuristics, and non-accusatory wallet classification foundations.**
 Do not begin it implicitly.
+
+## Phase 2B implementation notes
+
+- Migration `20260712180143_wallet_quality_metrics` adds quality analysis runs,
+  metric sets, category rows, and time-window rows with latest-completed selection.
+- Exact decimal summaries cover eligibility, result rates, median/mean/P25/P75,
+  gross gains/losses, profit factor, concentration, holding/size behavior, and
+  separately labeled historical candle outcomes. Zero denominators remain null.
+- Sample tiers describe count only. Central warnings disclose incomplete history,
+  low coverage, transfers, unmatched sells, missing fees, outlier dominance,
+  partial outcomes, and insufficient category/recent/older samples.
+- Categories are stable factual venue/router/size/holding/confidence/completeness
+  groups; comparison preserves user order and never sorts by performance.
+- Routes: bounded manual analyze, latest metric list/detail, category/time-window
+  reads, and historical run detail. Overview and Help are extended.
+- Verification: shared 22, API 189, frontend 61 = 272 tests; lint/build pass.
+- Manual analysis: one existing partial-history wallet, no reconstruction/sync/
+  decode/backfill. Latest set: 28 total, 0 eligible, 28 excluded, VERY_SMALL/LOW,
+  15 categories, 3 insufficient windows, five explicit warnings. All six web
+  routes served; detailed interactions are jsdom-tested, not browser-automated.
 
 ## Phase 2A implementation notes
 

@@ -496,4 +496,9 @@ details.helper[open] summary { margin-bottom: 6px; }
 .data-limitations { margin-top: 12px; color: var(--muted); }
 .data-limitations summary { cursor: pointer; color: var(--accent); }
 .data-limitations li { margin-top: 5px; overflow-wrap: anywhere; }
+.quality-card { margin-top: 14px; }
+.quality-card details { margin-top: 10px; }
+.quality-card details > summary { cursor: pointer; color: var(--accent); }
+.category-grid, .comparison-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); gap: 10px; margin-top: 10px; }
 @media (max-width: 640px) { .wallet-picker { grid-template-columns: 1fr; } .position-list .market-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .category-grid, .comparison-grid { grid-template-columns: minmax(0,1fr); } }

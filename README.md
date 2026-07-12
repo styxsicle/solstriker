@@ -1,7 +1,7 @@
 # Memecoin Lab
 
 A **local** Solana memecoin research and paper-trading application, built in small
-checkpoints. Current checkpoint: **Phase 2A — wallet position reconstruction**
+checkpoints. Current checkpoint: **Phase 2B — wallet quality evidence**
 (1A: foundation + wallet import; 1B: historical activity ingestion;
 1C: reliable swap decoding; 1D-A: beginner-friendly UI shell).
 
@@ -265,6 +265,37 @@ The additive migration `20260712172219_wallet_position_reconstruction` adds
 position/profile reads, position detail, and run audit. The local reference
 bankroll defaults to 2.2 SOL, persists only in localStorage, and provides
 descriptive size percentages—no wallet connection, ranking, or recommendation.
+
+## Wallet quality evidence (Phase 2B)
+
+Quality analysis is manual and bounded to 1–10 explicitly selected wallets. It
+requires each wallet's latest completed FIFO reconstruction and never triggers
+reconstruction, synchronization, outcome calculation, or market backfill. Normal
+reads select only the latest completed quality run per wallet; historical audit
+runs remain addressable by ID.
+
+Strict performance evidence requires a closed position with known raw result and
+ROI, no unmatched/oversold quantity, no unknown basis, and no transfer-corruption
+warning. Every metric reports eligible/excluded counts, coverage, confidence, and
+warnings. Sample tiers are `VERY_SMALL` (<5), `SMALL` (5–19), `MODERATE` (20–49),
+`LARGE` (50–199), and `VERY_LARGE` (200+); these describe sample size only.
+
+Calculations use `decimal.js`: positive reconstructed-result rate = positive
+eligible results / eligible results × 100; profit factor = gross positive raw
+results / absolute gross negative raw results (null when gross loss is zero).
+Medians and interpolated P25/P75 use sorted exact decimals. Outliers are retained;
+largest gain/loss contribution and median/mean divergence expose their influence.
+The analysis also records holding/size distributions, distinct/repeated tokens,
+fee and outcome coverage, separate candle-outcome medians, and 7-day/30-day/older
+windows that remain unavailable when samples are insufficient.
+
+Factual categories include execution venue, router/application, position-size
+bucket, holding-duration bucket, event confidence, and data completeness. They
+are displayed in stable type/value order and are never ranked. Wallet Intelligence
+adds Simple/Quant evidence panels and a user-ordered, maximum-three-wallet neutral
+comparison using the local 2.2 SOL reference bankroll. Migration:
+`20260712180143_wallet_quality_metrics`; models: `WalletQualityAnalysisRun`,
+`WalletQualityMetricSet`, `WalletCategoryMetric`, `WalletTimeWindowMetric`.
 
 ## Development seed data
 

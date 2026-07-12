@@ -176,6 +176,25 @@ const GLOSSARY: { group: string; terms: Term[] }[] = [
       },
     ],
   },
+  {
+    group: 'Quality evidence',
+    terms: [
+      { term: 'Eligible position', definition: 'A reconstructed closed position with enough reliable basis and result data for the stated metric.' },
+      { term: 'Excluded position', definition: 'A position kept visible but omitted from a metric because required evidence is missing or affected.' },
+      { term: 'Positive reconstructed-result rate', definition: 'The share of eligible reconstructed results above zero; it is not lifetime profitability.' },
+      { term: 'Median', definition: 'The middle observation after values are sorted.' },
+      { term: 'Mean', definition: 'The arithmetic average, which can be strongly affected by unusually large observations.' },
+      { term: 'Percentile', definition: 'A boundary showing what portion of sorted observations falls at or below it.' },
+      { term: 'Profit factor', definition: 'Gross known positive results divided by the absolute gross known negative results, when both are available.' },
+      { term: 'Sample size', definition: 'The number of eligible observations behind a metric.' },
+      { term: 'Outlier', definition: 'An unusually large or small observation that remains visible and may influence averages.' },
+      { term: 'Dispersion', definition: 'How spread out observed values are.' },
+      { term: 'Category metric', definition: 'The same descriptive calculation limited to a factual group such as venue or size bucket.' },
+      { term: 'Recent-versus-older comparison', definition: 'A neutral comparison of bounded recent observations with older synchronized history.' },
+      { term: 'Data completeness', definition: 'Whether the synchronized events contain the history and basis needed for a calculation.' },
+      { term: 'Evidence confidence', definition: 'How complete and reliable the supporting sample is; it does not predict future results.' },
+    ],
+  },
 ];
 
 export function HelpPage() {

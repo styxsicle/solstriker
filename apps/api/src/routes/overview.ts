@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { PrismaClient } from '@prisma/client';
 import { freshnessOf, USABLE_SNAPSHOT_STATUSES } from '../services/tokenMetrics/freshness.js';
 import { latestCompletedRunByWallet } from '../services/walletPositions/latestRuns.js';
+import { latestQualityMetricSetByWallet } from '../services/walletQuality/latestRuns.js';
 
 /** Read-only research-database summary for the dashboard Overview page. */
 export function registerOverviewRoute(app: FastifyInstance, prisma: PrismaClient) {
@@ -104,6 +105,15 @@ export function registerOverviewRoute(app: FastifyInstance, prisma: PrismaClient
       prisma.walletPositionReconstructionRun.findFirst({ orderBy: { startedAt: 'desc' } }),
     ]);
     const totalMatches = await prisma.walletTradeMatch.count({ where: { positionId: { in: currentPositions.map((p) => p.id) } } });
+    const latestQuality = await latestQualityMetricSetByWallet(prisma);
+    const qualityIds = [...latestQuality.values()];
+    const [qualitySets, qualityCategoryCount, qualityWindowCount, latestQualityRun] = await Promise.all([
+      prisma.walletQualityMetricSet.findMany({ where: { id: { in: qualityIds } }, select: { sampleSizeTier: true, completeHistory: true } }),
+      prisma.walletCategoryMetric.count({ where: { metricSetId: { in: qualityIds } } }),
+      prisma.walletTimeWindowMetric.count({ where: { metricSetId: { in: qualityIds } } }),
+      prisma.walletQualityAnalysisRun.findFirst({ orderBy: [{ completedAt: 'desc' }, { id: 'desc' }] }),
+    ]);
+    const tierCount=(tier:string)=>qualitySets.filter(s=>s.sampleSizeTier===tier).length;
 
     return {
       wallets: { total: walletsTotal, enabled: walletsEnabled, dev: walletsDev },
@@ -137,6 +147,16 @@ export function registerOverviewRoute(app: FastifyInstance, prisma: PrismaClient
         walletsReconstructed: latestRuns.size, totalPositions, closedPositions,
         openPositions, incompletePositions, totalMatches, profilesGenerated: latestRuns.size,
         latestRunStatus: latestPositionRun?.status ?? null,
+      },
+      quality: {
+        walletsAnalyzed: latestQuality.size,
+        latestRunStatus: latestQualityRun?.status ?? null,
+        metricSetsGenerated: latestQuality.size,
+        categoryMetricSetsGenerated: qualityCategoryCount,
+        timeWindowComparisonsGenerated: qualityWindowCount,
+        verySmallSamples: tierCount('VERY_SMALL'), smallSamples: tierCount('SMALL'),
+        moderateSamples: tierCount('MODERATE'), largeSamples: tierCount('LARGE') + tierCount('VERY_LARGE'),
+        incompleteHistoryWallets: qualitySets.filter(s=>!s.completeHistory).length,
       },
     };
   });

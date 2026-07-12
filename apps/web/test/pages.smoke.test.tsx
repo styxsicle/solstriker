@@ -48,6 +48,7 @@ const RESPONSES: Record<string, unknown> = {
       buysWithoutOutcome: 1,
     },
     positions: { walletsReconstructed: 0, totalPositions: 0, closedPositions: 0, openPositions: 0, incompletePositions: 0, totalMatches: 0, profilesGenerated: 0, latestRunStatus: null },
+    quality: { walletsAnalyzed: 0, latestRunStatus: null, metricSetsGenerated: 0, categoryMetricSetsGenerated: 0, timeWindowComparisonsGenerated: 0, verySmallSamples: 0, smallSamples: 0, moderateSamples: 0, largeSamples: 0, incompleteHistoryWallets: 0 },
   },
   '/api/wallets': { items: [], page: 1, pageSize: 50, total: 0, stats: { total: 10, enabled: 9 }, groups: [] },
   '/api/activity/status': { providerConfigured: true, maxWalletsPerSync: 10, items: [] },
@@ -137,6 +138,9 @@ describe('page smoke rendering', () => {
     expect(screen.getByText('Privacy and safety')).toBeTruthy();
     expect(screen.getByText('Seed phrase')).toBeTruthy();
     expect(screen.getByText('Execution venue')).toBeTruthy();
+    expect(screen.getByText('Positive reconstructed-result rate')).toBeTruthy();
+    expect(screen.getByText('Profit factor')).toBeTruthy();
+    expect(screen.getByText('Evidence confidence')).toBeTruthy();
     expect(screen.getByText('Pump.fun')).toBeTruthy();
     expect(screen.getByText(/cannot sign\s*or submit transactions/)).toBeTruthy();
   });

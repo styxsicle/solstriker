@@ -122,7 +122,13 @@ signing, and real trades.
 - Bounded manual APIs, audit runs, profiles, and Wallet Intelligence foundation
 - Local-only configurable reference-bankroll comparison; no rankings/advice
 
-### ⏭ Phase 2B — Wallet quality metrics, category-specific performance, consistency analysis, and non-ranking research comparisons
+### ✅ Phase 2B — Wallet quality metrics, category-specific performance, consistency analysis, and non-ranking research comparisons
+
+- Exact descriptive evidence, eligibility/coverage, sample tiers and safeguards
+- Stable factual categories, outcome medians and recent/older windows
+- Neutral user-ordered comparison (max 3), never a ranking
+
+### ⏭ Phase 2C — Wallet behavior archetypes, leader/follower timing evidence, related-wallet heuristics, and non-accusatory wallet classification foundations
 
 - Per-wallet historical PnL and hit-rate from recorded events
 - Ranking views; no predictions

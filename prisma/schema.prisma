@@ -32,6 +32,7 @@ model TrackedWallet {
   syncState WalletSyncState?
   reconstructedPositions WalletPosition[]
   behaviorProfiles WalletBehaviorProfile[]
+  qualityMetricSets WalletQualityMetricSet[]
 
   @@index([group])
   @@index([enabled])
@@ -361,6 +362,7 @@ model WalletPositionReconstructionRun {
 
   positions WalletPosition[]
   profiles  WalletBehaviorProfile[]
+  qualityMetricSets WalletQualityMetricSet[]
 
   @@index([startedAt])
   @@index([status])
@@ -496,4 +498,168 @@ model WalletBehaviorProfile {
   @@index([reconstructionRunId])
   @@index([status])
   @@index([calculationVersion])
+}
+
+// Phase 2B — auditable, bounded descriptive quality-evidence analysis.
+model WalletQualityAnalysisRun {
+  id                    String    @id @default(cuid())
+  calculationVersion    Int       @default(1)
+  status                String    @default("RUNNING")
+  startedAt             DateTime  @default(now())
+  completedAt           DateTime?
+  requestedWalletCount  Int       @default(0)
+  processedWalletCount  Int       @default(0)
+  eligiblePositionCount Int       @default(0)
+  excludedPositionCount Int       @default(0)
+  metricSetCount        Int       @default(0)
+  categorySetCount      Int       @default(0)
+  timeWindowSetCount    Int       @default(0)
+  warningCount          Int       @default(0)
+  errorCount            Int       @default(0)
+  sanitizedErrorSummary String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  metricSets WalletQualityMetricSet[]
+
+  @@index([status])
+  @@index([startedAt])
+  @@index([calculationVersion])
+}
+
+model WalletQualityMetricSet {
+  id                         String   @id @default(cuid())
+  analysisRunId              String
+  reconstructionRunId        String
+  trackedWalletId            String
+  calculationVersion         Int      @default(1)
+  status                     String
+  confidence                 String
+  sampleSizeTier             String
+  totalPositionCount         Int      @default(0)
+  eligibleClosedCount        Int      @default(0)
+  eligibleOpenCount          Int      @default(0)
+  excludedCount              Int      @default(0)
+  highConfidenceCount        Int      @default(0)
+  lowerConfidenceCount       Int      @default(0)
+  positiveRawCount           Int      @default(0)
+  negativeRawCount           Int      @default(0)
+  flatRawCount               Int      @default(0)
+  positiveAllInCount         Int      @default(0)
+  negativeAllInCount         Int      @default(0)
+  rawPositiveRatePct         String?
+  allInPositiveRatePct       String?
+  medianRawPnlSol            String?
+  meanRawPnlSol              String?
+  p25RawPnlSol               String?
+  p75RawPnlSol               String?
+  minRawPnlSol               String?
+  maxRawPnlSol               String?
+  medianAllInPnlSol          String?
+  meanAllInPnlSol            String?
+  medianRawRoiPct            String?
+  meanRawRoiPct              String?
+  p25RawRoiPct               String?
+  p75RawRoiPct               String?
+  medianAllInRoiPct          String?
+  meanAllInRoiPct            String?
+  grossGainSol               String?
+  grossLossSol               String?
+  profitFactor               String?
+  largestGainContributionPct String?
+  largestLossContributionPct String?
+  medianHoldingSeconds       String?
+  meanHoldingSeconds         String?
+  p25HoldingSeconds          String?
+  p75HoldingSeconds          String?
+  medianPositionSizeSol      String?
+  meanPositionSizeSol        String?
+  p25PositionSizeSol         String?
+  p75PositionSizeSol         String?
+  observedDistinctTokenCount Int      @default(0)
+  transferAffectedCount      Int      @default(0)
+  unmatchedSellCount         Int      @default(0)
+  completeHistory            Boolean  @default(false)
+  eligibleCoveragePct        String?
+  knownFeeCoveragePct        String?
+  outcomeCoveragePct         String?
+  complete1hOutcomePct       String?
+  complete24hOutcomePct      String?
+  consistencyJson            String   @default("{}")
+  holdingBucketsJson         String   @default("{}")
+  outcomeMetricsJson         String   @default("{}")
+  warningCodes               String   @default("[]")
+  calculatedAt               DateTime @default(now())
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  analysisRun       WalletQualityAnalysisRun @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+  reconstructionRun WalletPositionReconstructionRun @relation(fields: [reconstructionRunId], references: [id])
+  trackedWallet     TrackedWallet @relation(fields: [trackedWalletId], references: [id])
+  categories        WalletCategoryMetric[]
+  timeWindows       WalletTimeWindowMetric[]
+
+  @@unique([analysisRunId, trackedWalletId, calculationVersion])
+  @@index([trackedWalletId])
+  @@index([analysisRunId])
+  @@index([reconstructionRunId])
+  @@index([sampleSizeTier])
+  @@index([status])
+  @@index([calculationVersion])
+  @@index([calculatedAt])
+}
+
+model WalletCategoryMetric {
+  id                    String   @id @default(cuid())
+  metricSetId           String
+  categoryType          String
+  categoryValue         String
+  totalSampleCount      Int      @default(0)
+  eligibleSampleCount   Int      @default(0)
+  excludedSampleCount   Int      @default(0)
+  confidence            String
+  positiveRawCount      Int      @default(0)
+  negativeRawCount      Int      @default(0)
+  rawPositiveRatePct    String?
+  medianRawPnlSol       String?
+  medianRawRoiPct       String?
+  medianAllInRoiPct     String?
+  medianHoldingSeconds  String?
+  medianPositionSizeSol String?
+  warningCodes          String   @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  metricSet WalletQualityMetricSet @relation(fields: [metricSetId], references: [id], onDelete: Cascade)
+
+  @@unique([metricSetId, categoryType, categoryValue])
+  @@index([categoryType, categoryValue])
+  @@index([confidence])
+}
+
+model WalletTimeWindowMetric {
+  id                    String    @id @default(cuid())
+  metricSetId           String
+  windowType            String
+  windowStart           DateTime?
+  windowEnd             DateTime?
+  sampleCount           Int       @default(0)
+  eligibleSampleCount   Int       @default(0)
+  confidence            String
+  positiveRawRatePct    String?
+  medianRawPnlSol       String?
+  medianRawRoiPct       String?
+  medianAllInRoiPct     String?
+  medianHoldingSeconds  String?
+  medianPositionSizeSol String?
+  warningCodes          String    @default("[]")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  metricSet WalletQualityMetricSet @relation(fields: [metricSetId], references: [id], onDelete: Cascade)
+
+  @@unique([metricSetId, windowType])
+  @@index([windowType])
+  @@index([windowStart, windowEnd])
+  @@index([confidence])
 }

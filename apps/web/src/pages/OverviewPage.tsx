@@ -388,6 +388,8 @@ export function OverviewPage() {
         </div>
       </section>
 
+      <section className="panel" aria-labelledby="overview-quality"><h2 id="overview-quality">Wallet quality evidence</h2><p className="panel-sub">Descriptive evidence from each wallet’s latest completed analysis. No rankings or recommendations.</p><div className="cards"><div className="card"><div className="card-label">Wallets analyzed</div><div className="card-value"><Value value={overview?.quality?.walletsAnalyzed.toLocaleString()}/></div></div><div className="card"><div className="card-label">Current metric sets</div><div className="card-value"><Value value={overview?.quality?.metricSetsGenerated.toLocaleString()}/></div></div><div className="card"><div className="card-label">Category / time-window sets</div><div className="card-value"><Value value={overview?`${overview.quality.categoryMetricSetsGenerated} / ${overview.quality.timeWindowComparisonsGenerated}`:null}/></div></div><div className="card"><div className="card-label">Very-small / small samples</div><div className="card-value"><Value value={overview?`${overview.quality.verySmallSamples} / ${overview.quality.smallSamples}`:null}/></div></div><div className="card"><div className="card-label">Incomplete-history wallets</div><div className="card-value"><Value value={overview?.quality?.incompleteHistoryWallets.toLocaleString()}/></div>{overview?.quality?.latestRunStatus&&<div className="card-note">Latest run: {overview.quality.latestRunStatus}</div>}</div></div></section>
+
       <section className="panel" aria-labelledby="overview-capabilities">
         <h2 id="overview-capabilities">Current capabilities</h2>
         <div className="cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
