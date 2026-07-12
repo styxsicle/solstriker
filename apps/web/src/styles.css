@@ -484,3 +484,9 @@ details.helper[open] summary { margin-bottom: 6px; }
 .outcome-body .notice.warn {
   font-size: 12.5px;
 }
+
+/* ---------- Wallet Intelligence foundation (Phase 2A) ---------- */
+.wallet-picker { display: grid; grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); gap: 7px 16px; margin: 12px 0; max-height: 280px; overflow: auto; }
+.position-list { display: flex; flex-direction: column; gap: 12px; }
+.position-list details.card summary { cursor: pointer; }
+@media (max-width: 640px) { .wallet-picker { grid-template-columns: 1fr; } .position-list .market-grid { grid-template-columns: 1fr; } }

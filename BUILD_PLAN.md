@@ -115,7 +115,14 @@ signing, and real trades.
 - Versioned, no-look-ahead BUY-entry outcome calculation and coverage UI
 - Additive migration `20260712154023_historical_market_candles`
 
-### ⏭ Phase 2A — Wallet trade reconstruction, position matching, realized/unrealized outcome foundations, and bankroll-aware wallet profiles
+### ✅ Phase 2A — Wallet trade reconstruction, position matching, realized/unrealized outcome foundations, and bankroll-aware wallet profiles
+
+- Exact-decimal FIFO lots, cycles, partial exits, unmatched sells, and transfers
+- Raw versus attributable all-in results; stored-snapshot open valuation
+- Bounded manual APIs, audit runs, profiles, and Wallet Intelligence foundation
+- Local-only configurable reference-bankroll comparison; no rankings/advice
+
+### ⏭ Phase 2B — Wallet quality metrics, category-specific performance, consistency analysis, and non-ranking research comparisons
 
 - Per-wallet historical PnL and hit-rate from recorded events
 - Ranking views; no predictions
@@ -134,3 +141,8 @@ signing, and real trades.
 
 - Probability estimates only once enough labeled history exists
 - Backtesting over recorded (not synthetic) data
+
+### Later — Night Watch / Overnight Desk
+
+Candidate monitoring and overnight research plans only after live signals, FOMO
+analysis, token-risk analysis, and paper validation. Disabled and unimplemented.

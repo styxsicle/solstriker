@@ -47,6 +47,7 @@ const RESPONSES: Record<string, unknown> = {
       buysWithPartialOutcome: 1,
       buysWithoutOutcome: 1,
     },
+    positions: { walletsReconstructed: 0, totalPositions: 0, closedPositions: 0, openPositions: 0, incompletePositions: 0, totalMatches: 0, profilesGenerated: 0, latestRunStatus: null },
   },
   '/api/wallets': { items: [], page: 1, pageSize: 50, total: 0, stats: { total: 10, enabled: 9 }, groups: [] },
   '/api/activity/status': { providerConfigured: true, maxWalletsPerSync: 10, items: [] },

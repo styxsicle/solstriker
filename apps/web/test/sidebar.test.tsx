@@ -34,5 +34,7 @@ describe('Sidebar', () => {
     ).toBe('page');
     fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
     expect(onNavigate).toHaveBeenCalledWith('activity');
+    const intelligence = screen.getByRole('button', { name: 'Wallet Intelligence' });
+    expect((intelligence as HTMLButtonElement).disabled).toBe(false);
   });
 });

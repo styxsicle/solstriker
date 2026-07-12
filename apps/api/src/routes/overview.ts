@@ -92,6 +92,14 @@ export function registerOverviewRoute(app: FastifyInstance, prisma: PrismaClient
     const buysWithComplete = outcomeCount('COMPLETE');
     const buysWithPartial = outcomeCount('PARTIAL');
     const buysWithAnyOutcome = outcomeGroups.reduce((sum, g) => sum + g._count._all, 0);
+    const [positionWallets, totalPositions, closedPositions, openPositions, incompletePositions, totalMatches, totalProfiles, latestPositionRun] = await Promise.all([
+      prisma.walletPosition.findMany({ distinct: ['trackedWalletId'], select: { trackedWalletId: true } }),
+      prisma.walletPosition.count(), prisma.walletPosition.count({ where: { status: 'CLOSED' } }),
+      prisma.walletPosition.count({ where: { status: 'OPEN' } }),
+      prisma.walletPosition.count({ where: { status: { in: ['PARTIAL','INCOMPLETE_HISTORY','UNKNOWN_BASIS','UNMATCHED_SELL'] } } }),
+      prisma.walletTradeMatch.count(), prisma.walletBehaviorProfile.count(),
+      prisma.walletPositionReconstructionRun.findFirst({ orderBy: { startedAt: 'desc' } }),
+    ]);
 
     return {
       wallets: { total: walletsTotal, enabled: walletsEnabled, dev: walletsDev },
@@ -120,6 +128,11 @@ export function registerOverviewRoute(app: FastifyInstance, prisma: PrismaClient
         buysWithCompleteOutcome: buysWithComplete,
         buysWithPartialOutcome: buysWithPartial,
         buysWithoutOutcome: Math.max(0, eligibleBuys - buysWithAnyOutcome),
+      },
+      positions: {
+        walletsReconstructed: positionWallets.length, totalPositions, closedPositions,
+        openPositions, incompletePositions, totalMatches, profilesGenerated: totalProfiles,
+        latestRunStatus: latestPositionRun?.status ?? null,
       },
     };
   });

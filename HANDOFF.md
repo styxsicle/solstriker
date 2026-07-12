@@ -1,10 +1,10 @@
 # HANDOFF
 
 Continuation notes for any coding model/agent picking up this project.
-**Current state: Phase 1D-B2 complete** (1A foundation, 1B activity ingestion,
+**Current state: Phase 2A complete** (1A foundation, 1B activity ingestion,
 1C reliable swap decoding, 1D-A beginner-friendly UI shell, 1D-B1 current token
 market snapshots, 1D-B2 historical OHLCV and entry outcomes). Do not start
-Phase 2A until the user asks.
+Phase 2B until the user asks.
 
 ## What this project is
 
@@ -523,6 +523,42 @@ horizontally. Missing values show "unknown", never zero.
 
 ## Exact next checkpoint
 
-**Phase 2A — Wallet trade reconstruction, position matching,
-realized/unrealized outcome foundations, and bankroll-aware wallet profiles.**
+**Phase 2B — Wallet quality metrics, category-specific performance, consistency
+analysis, and non-ranking research comparisons.**
 Do not begin it implicitly.
+
+## Phase 2A implementation notes
+
+- Migration `20260712172219_wallet_position_reconstruction`; models:
+  reconstruction run, position, FIFO match, behavior profile. Unique run/wallet/
+  token/cycle positions and unique position/buy/sell/sequence/version matches.
+- `decimal.js` (48-digit precision) performs all financial arithmetic. Values
+  persist as strings; no display rounding enters accounting.
+- Eligible exact trades: v2 CONFIRMED/LIKELY, known token/time/positive quantity,
+  known positive SOL or wSOL quote. Stablecoin/token quotes, legacy/unknown, and
+  missing fields are excluded with centralized warning codes.
+- FIFO allocation is proportional for buy cost/fees and sell proceeds/fees.
+  Network + platform/router + tip are attributable; priority is not added again,
+  rent/unrelated/unattributed are excluded. Transfers change inventory and basis
+  confidence, never proceeds or zero-cost acquisition.
+- Open valuation uses latest stored priceSol and priceUsd separately, carries
+  provider snapshot identity/status/time/freshness, and warns stale/missing.
+- Manual route is explicit, max 10, dev-excluded, locked, per-wallet isolated.
+  Read APIs are bounded and default to chronology—not profitability.
+- Wallet Intelligence is enabled with disclaimer, search/selection, run totals,
+  profiles, warnings, positions, FIFO details, Simple/Quant modes, responsive
+  layout, and localStorage-only 2.2 SOL reference bankroll.
+- Confidence describes data completeness only. It is never profitability.
+- Night Watch / Overnight Desk remains a later disabled roadmap concept after
+  live signals, FOMO, token-risk analysis, and paper validation.
+- Automated verification: shared 22, API 183, frontend 59 = 264 tests; lint and
+  production build pass. SQLite integrity is checked separately.
+- Manual verification used only synchronized wallet `mr phoof` (partial history),
+  without sync/re-sync/re-decode/backfill. The final run created 28 positions,
+  8 FIFO matches, one PARTIAL profile, included 37 and excluded 49 events. A
+  CONFIRMED match was checked against stored events: 14,388,725.885774 tokens,
+  3.194709729 SOL buy cost, 2.511736011 SOL sell proceeds, exact allocated fees,
+  and 433 seconds holding time. All six frontend routes served; interactive UI
+  behavior is jsdom-tested, not browser-automated. Two audit runs were retained
+  (the second verifies the final cycle-boundary implementation), totaling 56
+  position rows, 16 match rows, and 2 profiles.

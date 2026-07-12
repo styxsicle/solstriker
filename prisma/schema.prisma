@@ -30,6 +30,8 @@ model TrackedWallet {
 
   events    WalletEvent[]
   syncState WalletSyncState?
+  reconstructedPositions WalletPosition[]
+  behaviorProfiles WalletBehaviorProfile[]
 
   @@index([group])
   @@index([enabled])
@@ -51,6 +53,7 @@ model Token {
   marketSnapshots TokenMarketSnapshot[]
   candles         TokenMarketCandle[]
   entryOutcomes   WalletEntryOutcome[]
+  walletPositions WalletPosition[]
 
   @@index([stage])
 }
@@ -332,4 +335,165 @@ model WalletEntryOutcome {
   @@index([tokenId])
   @@index([status])
   @@index([calculatedAt])
+}
+
+// Phase 2A — one auditable, explicit, bounded wallet reconstruction request.
+model WalletPositionReconstructionRun {
+  id                    String    @id @default(cuid())
+  calculationVersion    Int       @default(1)
+  method                String    @default("FIFO")
+  status                String    @default("RUNNING")
+  startedAt             DateTime  @default(now())
+  completedAt           DateTime?
+  requestedWalletCount  Int       @default(0)
+  processedWalletCount  Int       @default(0)
+  eventCount            Int       @default(0)
+  includedEventCount    Int       @default(0)
+  excludedEventCount    Int       @default(0)
+  positionCount         Int       @default(0)
+  matchCount            Int       @default(0)
+  profileCount          Int       @default(0)
+  warningCount          Int       @default(0)
+  errorCount            Int       @default(0)
+  sanitizedErrorSummary String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  positions WalletPosition[]
+  profiles  WalletBehaviorProfile[]
+
+  @@index([startedAt])
+  @@index([status])
+}
+
+model WalletPosition {
+  id                         String   @id @default(cuid())
+  reconstructionRunId        String
+  trackedWalletId            String
+  tokenId                    String
+  cycleNumber                Int
+  status                     String
+  confidence                 String
+  openedAt                   DateTime?
+  closedAt                   DateTime?
+  firstBuyEventId            String?
+  lastEventAt                DateTime?
+  quoteAsset                 String   @default("SOL")
+  totalBoughtTokenAmount     String?
+  totalSoldTokenAmount       String?
+  openTokenAmount            String?
+  knownCostBasisSol          String?
+  knownProceedsSol           String?
+  allocatedKnownFeesSol      String?
+  rawRealizedPnlSol          String?
+  knownAllInRealizedPnlSol   String?
+  rawRealizedRoiPct          String?
+  knownAllInRealizedRoiPct   String?
+  estimatedCurrentValueSol   String?
+  estimatedCurrentValueUsd   String?
+  estimatedUnrealizedPnlSol  String?
+  estimatedUnrealizedRoiPct  String?
+  valuationSnapshotId        String?
+  valuationObservedAt        DateTime?
+  valuationFreshness         String?
+  valuationStatus            String?
+  holdingDurationSeconds     Int?
+  transferInAmount           String?
+  transferOutAmount          String?
+  unmatchedSellAmount        String?
+  unknownBasisAmount         String?
+  includedEventCount         Int      @default(0)
+  excludedEventCount         Int      @default(0)
+  includedEventIdsJson       String   @default("[]")
+  exclusionReasonsJson       String   @default("[]")
+  decoderVersionsJson        String   @default("[]")
+  warningCodes               String   @default("[]")
+  calculationVersion         Int      @default(1)
+  calculatedAt               DateTime @default(now())
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  reconstructionRun WalletPositionReconstructionRun @relation(fields: [reconstructionRunId], references: [id], onDelete: Cascade)
+  trackedWallet     TrackedWallet @relation(fields: [trackedWalletId], references: [id])
+  token             Token @relation(fields: [tokenId], references: [id])
+  matches           WalletTradeMatch[]
+
+  @@unique([reconstructionRunId, trackedWalletId, tokenId, cycleNumber])
+  @@index([trackedWalletId])
+  @@index([tokenId])
+  @@index([status])
+  @@index([reconstructionRunId])
+  @@index([openedAt])
+  @@index([closedAt])
+  @@index([calculationVersion])
+}
+
+model WalletTradeMatch {
+  id                         String   @id @default(cuid())
+  positionId                 String
+  buyEventId                 String
+  sellEventId                String
+  sequence                   Int
+  matchedTokenAmount         String
+  allocatedBuyCostSol        String?
+  allocatedBuyFeesSol        String?
+  allocatedSellProceedsSol   String?
+  allocatedSellFeesSol       String?
+  rawRealizedPnlSol          String?
+  knownAllInRealizedPnlSol   String?
+  rawRealizedRoiPct          String?
+  knownAllInRealizedRoiPct   String?
+  holdingDurationSeconds     Int?
+  confidence                 String
+  warningCodes               String   @default("[]")
+  calculationVersion         Int      @default(1)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  position WalletPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  @@unique([positionId, buyEventId, sellEventId, sequence, calculationVersion])
+  @@index([buyEventId])
+  @@index([sellEventId])
+  @@index([calculationVersion])
+}
+
+model WalletBehaviorProfile {
+  id                              String   @id @default(cuid())
+  reconstructionRunId             String
+  trackedWalletId                 String
+  calculationVersion              Int      @default(1)
+  status                          String
+  confidence                      String
+  eligibleBuyCount                Int      @default(0)
+  eligibleSellCount               Int      @default(0)
+  closedPositionCount             Int      @default(0)
+  openPositionCount               Int      @default(0)
+  partialPositionCount            Int      @default(0)
+  unmatchedSellCount              Int      @default(0)
+  transferAffectedPositionCount   Int      @default(0)
+  knownPositionSizeMedianSol      String?
+  knownPositionSizeMeanSol        String?
+  knownPositionSizeP25Sol         String?
+  knownPositionSizeP75Sol         String?
+  knownPositionSizeMinSol         String?
+  knownPositionSizeMaxSol         String?
+  closedHoldingMedianSeconds      String?
+  closedHoldingMeanSeconds        String?
+  observedMaxConcurrentPositions  Int      @default(0)
+  knownFeeBurdenMedianPct         String?
+  completeHistory                 Boolean  @default(false)
+  warningCodes                    String   @default("[]")
+  calculatedAt                    DateTime @default(now())
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
+
+  reconstructionRun WalletPositionReconstructionRun @relation(fields: [reconstructionRunId], references: [id], onDelete: Cascade)
+  trackedWallet TrackedWallet @relation(fields: [trackedWalletId], references: [id])
+
+  @@unique([reconstructionRunId, trackedWalletId, calculationVersion])
+  @@index([trackedWalletId])
+  @@index([reconstructionRunId])
+  @@index([status])
+  @@index([calculationVersion])
 }

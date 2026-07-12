@@ -13,6 +13,7 @@ import { registerOverviewRoute } from './routes/overview.js';
 import { registerTokenMetricsRoutes } from './routes/tokenMetrics.js';
 import { registerHistoricalMarketRoutes } from './routes/historicalMarket.js';
 import { registerWalletOutcomesRoutes } from './routes/walletOutcomes.js';
+import { registerWalletPositionRoutes } from './routes/walletPositions.js';
 import type { SyncWalletOptions } from './services/activity/syncWallet.js';
 import { runDevSeed } from './services/seed.js';
 
@@ -68,6 +69,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     nodeEnv: env.NODE_ENV,
   });
   registerWalletOutcomesRoutes(app, { prisma });
+  registerWalletPositionRoutes(app, prisma, env.NODE_ENV);
   registerActivityRoutes(app, {
     prisma,
     provider: deps.activityProvider,

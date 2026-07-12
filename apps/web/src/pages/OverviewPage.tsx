@@ -375,6 +375,19 @@ export function OverviewPage() {
         </div>
       </section>
 
+      <section className="panel" aria-labelledby="overview-positions">
+        <h2 id="overview-positions">Wallet position reconstruction</h2>
+        <p className="panel-sub">FIFO accounting from synchronized events. Incomplete positions remain explicit and wallets are not ranked.</p>
+        <div className="cards">
+          <div className="card"><div className="card-label">Wallets reconstructed</div><div className="card-value"><Value value={overview?.positions?.walletsReconstructed.toLocaleString()} /></div></div>
+          <div className="card"><div className="card-label">Total positions</div><div className="card-value"><Value value={overview?.positions?.totalPositions.toLocaleString()} /></div></div>
+          <div className="card"><div className="card-label">Closed / open</div><div className="card-value"><Value value={overview ? `${overview.positions.closedPositions} / ${overview.positions.openPositions}` : null} /></div></div>
+          <div className="card"><div className="card-label">Incomplete positions</div><div className="card-value"><Value value={overview?.positions?.incompletePositions.toLocaleString()} /></div></div>
+          <div className="card"><div className="card-label">FIFO matches</div><div className="card-value"><Value value={overview?.positions?.totalMatches.toLocaleString()} /></div></div>
+          <div className="card"><div className="card-label">Profiles generated</div><div className="card-value"><Value value={overview?.positions?.profilesGenerated.toLocaleString()} /></div>{overview?.positions?.latestRunStatus&&<div className="card-note">Last run: {overview.positions.latestRunStatus}</div>}</div>
+        </div>
+      </section>
+
       <section className="panel" aria-labelledby="overview-capabilities">
         <h2 id="overview-capabilities">Current capabilities</h2>
         <div className="cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>

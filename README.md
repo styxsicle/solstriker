@@ -1,7 +1,7 @@
 # Memecoin Lab
 
 A **local** Solana memecoin research and paper-trading application, built in small
-checkpoints. Current checkpoint: **Phase 1D-B2 — historical OHLCV and entry outcomes**
+checkpoints. Current checkpoint: **Phase 2A — wallet position reconstruction**
 (1A: foundation + wallet import; 1B: historical activity ingestion;
 1C: reliable swap decoding; 1D-A: beginner-friendly UI shell).
 
@@ -231,6 +231,40 @@ Simple Mode labels the estimate and warning in plain language. Quant Mode shows
 exact decimal strings, pair/interval, every window, coverage, version, and
 calculation time. These are selected-pair market observations, not wallet PnL,
 guaranteed fills, fees, slippage, or available exits.
+
+## Wallet position reconstruction (Phase 2A)
+
+Wallet Intelligence reconstructs positions manually for 1–10 explicitly selected
+non-development wallets (start with 1–3). It never syncs or re-decodes activity.
+Events are ordered by timestamp, slot, signature, then ID and matched with FIFO.
+Only decoder-v2 CONFIRMED/LIKELY BUY/SELL events with token quantity, SOL/wSOL
+quote quantity, token identity, and time enter exact accounting. Legacy,
+UNKNOWN, missing, stablecoin, and token-to-token events remain visible as
+exclusions. Currencies are never mixed and no exchange rate is invented.
+
+Accounting uses `decimal.js`; stored amounts and percentages are exact decimal
+strings. For each allocation: raw result = sell proceeds − allocated buy swap
+cost. Known all-in result additionally subtracts allocated buy fees and sell
+fees. Included fees are network fee, attributable platform/router fee, and tip;
+priority fee is already part of network fee and is not double-counted. Rent,
+unrelated flows, and unattributed SOL are excluded and warned. ROI divides by
+allocated cost (or allocated cost + buy fees for all-in), with zero/missing
+denominators returning null. This is reconstruction, not tax accounting.
+
+Transfers are inventory adjustments, never trades: transfer-in creates unknown
+basis; transfer-out removes observable inventory without proceeds. Initial or
+excess sells are unmatched, not losses. Partial wallet backfills are always
+marked incomplete and are never described as lifetime performance. Open
+inventory uses only the latest stored selected-pair `priceSol` and `priceUsd`
+separately; stale/missing snapshot state is explicit and the estimate is never
+called live or realized.
+
+The additive migration `20260712172219_wallet_position_reconstruction` adds
+`WalletPositionReconstructionRun`, `WalletPosition`, `WalletTradeMatch`, and
+`WalletBehaviorProfile`. Routes include manual reconstruction, paginated/filterable
+position/profile reads, position detail, and run audit. The local reference
+bankroll defaults to 2.2 SOL, persists only in localStorage, and provides
+descriptive size percentages—no wallet connection, ranking, or recommendation.
 
 ## Development seed data
 

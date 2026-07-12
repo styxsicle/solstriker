@@ -70,6 +70,10 @@ export async function buildTestApp(
 }
 
 export async function resetDb(prisma: PrismaClient) {
+  await prisma.walletTradeMatch.deleteMany();
+  await prisma.walletPosition.deleteMany();
+  await prisma.walletBehaviorProfile.deleteMany();
+  await prisma.walletPositionReconstructionRun.deleteMany();
   await prisma.walletEntryOutcome.deleteMany();
   await prisma.tokenMarketCandle.deleteMany();
   await prisma.historicalMarketBackfillRun.deleteMany();

@@ -1,12 +1,13 @@
 import { ModeToggle } from './ModeToggle';
 
-export type PageId = 'overview' | 'wallets' | 'activity' | 'tokens' | 'help';
+export type PageId = 'overview' | 'wallets' | 'activity' | 'tokens' | 'intelligence' | 'help';
 
 export const PAGES: { id: PageId; label: string; icon: string }[] = [
   { id: 'overview', label: 'Overview', icon: '◎' },
   { id: 'wallets', label: 'Wallets', icon: '◈' },
   { id: 'activity', label: 'Activity', icon: '↯' },
   { id: 'tokens', label: 'Tokens', icon: '❖' },
+  { id: 'intelligence', label: 'Wallet Intelligence', icon: '⌁' },
   { id: 'help', label: 'Help', icon: '✚' },
 ];
 
@@ -14,7 +15,6 @@ export const FUTURE_FEATURES = [
   'Signals',
   'Coin Analyzer',
   'Backtesting',
-  'Wallet Intelligence',
   'Alerts',
 ];
 
