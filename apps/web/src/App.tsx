@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ModeProvider } from './lib/mode';
-import { PAGES, Sidebar, type PageId } from './components/Sidebar';
+import { ModeProvider, useMode } from './lib/mode';
+import { PAGES, QUANT_NAV, SIMPLE_NAV, Sidebar, type PageId } from './components/Sidebar';
 import { ModeToggle } from './components/ModeToggle';
+import { HomePage } from './pages/HomePage';
+import { LearnWalletPage } from './pages/LearnWalletPage';
+import { AdvancedPage } from './pages/AdvancedPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { WalletsPage } from './pages/WalletsPage';
 import { ActivityPage } from './pages/ActivityPage';
@@ -10,9 +13,9 @@ import { HelpPage } from './pages/HelpPage';
 import { WalletIntelligencePage } from './pages/WalletIntelligencePage';
 import { FocusTraderLabPage } from './pages/FocusTraderLabPage';
 
-function pageFromHash(): PageId {
+function pageFromHash(fallback: PageId): PageId {
   const hash = window.location.hash.replace(/^#\/?/, '');
-  return (PAGES.some((p) => p.id === hash) ? hash : 'overview') as PageId;
+  return (PAGES.some((p) => p.id === hash) ? hash : fallback) as PageId;
 }
 
 export function App() {
@@ -24,18 +27,26 @@ export function App() {
 }
 
 function Shell() {
-  const [page, setPage] = useState<PageId>(() => pageFromHash());
+  const { mode } = useMode();
+  // No (or an unrecognized) hash lands on the mode-appropriate default:
+  // Simple Mode opens on Home, Quant Mode keeps opening on Overview.
+  const defaultPage: PageId = mode === 'simple' ? 'home' : 'overview';
+  const [page, setPage] = useState<PageId>(() => pageFromHash(defaultPage));
 
   useEffect(() => {
-    const onHash = () => setPage(pageFromHash());
+    const onHash = () => setPage(pageFromHash(defaultPage));
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
+    // `defaultPage` intentionally only matters for the initial render's
+    // blank-hash case, so it is not a dependency of this effect.
   }, []);
 
   const navigate = (next: PageId) => {
     window.location.hash = `/${next}`;
     setPage(next);
   };
+
+  const navItems = mode === 'simple' ? SIMPLE_NAV : QUANT_NAV;
 
   return (
     <div className="layout">
@@ -48,20 +59,26 @@ function Shell() {
             <ModeToggle />
           </div>
           <nav className="top-nav" aria-label="Main navigation">
-            {PAGES.map((p) => (
+            {navItems.map((item) => (
               <button
-                key={p.id}
-                className={`nav-item ${page === p.id ? 'active' : ''}`}
-                aria-current={page === p.id ? 'page' : undefined}
-                onClick={() => navigate(p.id)}
+                key={item.id}
+                className={`nav-item ${page === item.id ? 'active' : ''} ${item.disabled ? 'disabled' : ''}`}
+                aria-current={!item.disabled && page === item.id ? 'page' : undefined}
+                disabled={item.disabled}
+                aria-disabled={item.disabled ? 'true' : undefined}
+                onClick={() => !item.disabled && navigate(item.id)}
               >
-                {p.label}
+                {item.label}
+                {item.disabled && <span className="badge muted">Coming later</span>}
               </button>
             ))}
           </nav>
         </div>
 
         <main className="content-inner">
+          {page === 'home' && <HomePage onNavigate={navigate} />}
+          {page === 'learn-wallet' && <LearnWalletPage onNavigate={navigate} />}
+          {page === 'advanced' && <AdvancedPage onNavigate={navigate} />}
           {page === 'overview' && <OverviewPage />}
           {page === 'wallets' && <WalletsPage />}
           {page === 'activity' && <ActivityPage />}

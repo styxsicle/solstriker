@@ -108,6 +108,110 @@ The mode is saved in localStorage and switching never reloads the page. A Help
 page defines every term used, and synthetic development records (wallets/tokens
 from `POST /api/dev/seed`) are hidden by default with a reveal toggle.
 
+## Beginner UX Simplification Pass
+
+Simple Mode's navigation and top-level pages were rebuilt around four
+questions — *what happened, why it matters, how trustworthy is the evidence,
+what to inspect next* — without touching any backend calculation, migration,
+or existing Quant Mode functionality.
+
+**Navigation.** Simple Mode's primary nav is now **Home · Wallets · Coin
+Check · Alerts · My Positions · Advanced**. Alerts and My Positions are not
+implemented — they render as disabled buttons carrying a visible "Coming
+later" badge, exactly like the pre-existing Quant Mode "Coming later" section;
+neither has a backend route, and clicking them never navigates anywhere.
+Quant Mode keeps its original primary nav (**Overview · Wallets · Activity ·
+Tokens · Wallet Intelligence · Focus Trader Lab · Help**) completely
+unchanged. `wallets` and `tokens` are the same underlying page and route in
+both modes — each page adapts its own presentation via the existing
+`useMode()` hook, the way `WalletsPage` and `TokensPage` already did. Every
+pre-existing hash route (`#/overview`, `#/activity`, `#/intelligence`,
+`#/focus`, `#/help`, `#/wallets`, `#/tokens`) still renders its page directly
+regardless of mode, so old bookmarks never silently break; only the
+*default*, blank-hash landing page differs by mode (Home for Simple, Overview
+for Quant). The Simple/Quant toggle remains a `localStorage`-persisted,
+no-reload switch, unchanged.
+
+**Home** (`pages/HomePage.tsx`) replaces Simple Mode's old Overview dashboard
+with four large action cards — Learn a wallet, Check a coin, See new
+opportunities (disabled, "Coming later" — this app does not discover live
+opportunities), View tracked wallets — followed by a small four-number
+research-status summary (tracked wallets, wallets with downloaded activity,
+wallets with completed research, discovered tokens) pulled from the existing
+`GET /api/overview`. The large technical dashboards (RPC status, candle runs,
+metric sets, reconstruction/fingerprint run detail) stay exactly where they
+were: on the Overview page, reachable from Quant Mode's nav or from Advanced.
+
+**Advanced** (`pages/AdvancedPage.tsx`) is a plain directory to the five
+existing detailed pages (Activity, Wallet Intelligence, Focus Trader Lab,
+Overview, Help) with one-line descriptions. No page was removed or
+duplicated — Advanced only relocates the entry point.
+
+**Learn a wallet** (`pages/LearnWalletPage.tsx`) is the beginner-facing
+one-click wallet preparation flow: search a wallet or paste an address → one
+"Learn this wallet" button → the existing confirmation modal → the exact same
+`POST /api/focus-wallets/prepare` endpoint and services from the one-click
+preparation feature (nothing about the pipeline is duplicated). Advanced
+options (transaction limit, default 500; "Continue older history"; "Refresh
+completed analysis") sit collapsed under an "Advanced preparation options"
+disclosure with their existing defaults and backend behavior unchanged. The
+four pipeline stages are relabeled for beginners only in this flow — Sync →
+"Download public trades", Reconstruction → "Organize buys and sells", Quality
+analysis → "Check past results", Strategy fingerprint → "Learn trading
+style" (`lib/prepareWording.ts`, `learnWalletSummary`) — and the completion
+screen is a plain-language narrative ("what happened", "inspect next"),
+never exposing run IDs, metric-set IDs, calculation versions or raw warning
+codes. Quant Mode's `PrepareWalletPanel` (now reachable via Focus Trader Lab
+→ Advanced) keeps every existing technical stage label, ID and warning code
+untouched.
+
+**Server-side wallet search.** `WalletIntelligencePage`, `FocusTraderLabPage`'s
+cohort picker, and `PrepareWalletPanel` used to fetch one fixed page of
+wallets (`?pageSize=50` / `?pageSize=200`) and filter it in the browser —
+silently hiding any wallet outside that page, including exact-address
+matches. All three now use a shared hook, `hooks/useWalletSearch.ts`, that
+always queries the backend's existing `search` parameter. The hook also
+caches every wallet object it has ever returned, so a selected wallet keeps
+showing its correct label and address even after the search query changes or
+is cleared — selection state itself stays owned by each page (primary vs.
+comparison roles, single- vs. multi-select differ per page). A shared
+`components/WalletLabel.tsx` renders label + shortened address consistently
+everywhere, so wallets that share the exact same label stay visually
+distinguishable by address.
+
+**BN wallet safety.** Several tracked wallets share the exact label `bn`.
+`bn trezor` (`HBYkoojFkFX7NWuF2VcpDWNXEdGatfNE6mYLsR2udSzo`) is a known,
+specifically-labeled wallet — it is **not** "BN Main". No code anywhere
+promotes any `bn`-labeled wallet to a primary/main role, pre-selects one
+because its label matched a search, or claims common ownership between
+similarly labeled wallets; the exact BN Main address remains unconfirmed and
+is never guessed at. This is enforced by `test/bnSafety.test.tsx`.
+
+**Wallets page.** Simple Mode leads with search and a plain-language card
+list (label + address + "Available for research" / "Not included in
+research" + one toggle action). Bulk import, source metadata, development
+records, raw group fields and import-format detail move under an "Advanced
+wallet management" disclosure — nothing was removed, and "Add one wallet"
+stays directly visible. Quant Mode keeps its original full table unchanged.
+
+**Coin Check** (the Simple Mode `TokensPage` title) leads with a client-side
+search over name/symbol/mint (the backend already returns every discovered
+token in one unpaginated response, so this is a real search, not the
+first-page bug pattern the wallet pickers had). It shows six fields first —
+price, market cap, liquidity, 24h volume, 24h price change, freshness — with
+provider identity, pair-selection detail, exact timestamps and FDV moved into
+a per-token "More details" disclosure. Snapshot and candle collection stay
+available but move under an "Advanced token research options" disclosure,
+not the first thing shown. The page states prominently and unconditionally:
+**"Full token safety checks are not built yet"** — contract safety, bundle
+analysis, holder analysis, creator-history analysis, sellability checks and
+price predictions are all explicitly not implemented. Quant Mode is
+unchanged.
+
+No backend calculation, financial value, FIFO/quality/fingerprint logic, or
+database schema changed in this pass — it is a frontend-only restructuring,
+and no new migration was created.
+
 ## Wallet activity sync (Phase 1B)
 
 The **Activity** tab syncs historical transaction activity for manually selected

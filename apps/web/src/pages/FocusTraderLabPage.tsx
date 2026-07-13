@@ -13,12 +13,12 @@ import {
   type FocusCohort,
   type StrategyAnalysisResult,
   type StrategyFingerprint,
-  type Wallet,
-  type WalletListResponse,
 } from '../api';
 import { PageHeader } from '../components/PageHeader';
 import { CohortComparison, StrategyFingerprintPanel, walletName } from '../components/StrategyFingerprint';
 import { PrepareWalletPanel } from '../components/PrepareWalletPanel';
+import { WalletLabel } from '../components/WalletLabel';
+import { useWalletSearch } from '../hooks/useWalletSearch';
 import { useMode } from '../lib/mode';
 import { shortAddr } from '../lib/format';
 import { BANKROLL_STORAGE_KEY, DEFAULT_REFERENCE_BANKROLL_SOL } from '../lib/portability';
@@ -29,8 +29,7 @@ const MAX_COMPARISONS = MAX_MEMBERS - 1;
 
 export function FocusTraderLabPage() {
   const { mode } = useMode();
-  const [wallets, setWallets] = useState<Wallet[]>([]);
-  const [search, setSearch] = useState('');
+  const { query: search, setQuery: setSearch, results: found, getWallet } = useWalletSearch({ includeDev: false });
   const [cohorts, setCohorts] = useState<FocusCohort[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [active, setActive] = useState<FocusCohort | null>(null);
@@ -67,9 +66,6 @@ export function FocusTraderLabPage() {
   }, []);
 
   useEffect(() => {
-    void api<WalletListResponse>('/api/wallets?pageSize=200&includeDev=false')
-      .then((response) => setWallets(response.items))
-      .catch((e) => setError((e as Error).message));
     void loadCohorts().catch((e) => setError((e as Error).message));
     void loadFingerprints().catch(() => setFingerprints([]));
   }, [loadCohorts, loadFingerprints]);
@@ -209,17 +205,16 @@ export function FocusTraderLabPage() {
     }
   }
 
-  const shown = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return wallets.slice(0, 25);
-    return wallets
-      .filter(
-        (wallet) =>
-          (wallet.label ?? '').toLowerCase().includes(needle) ||
-          wallet.address.toLowerCase().includes(needle),
-      )
-      .slice(0, 25);
-  }, [wallets, search]);
+  // Selected wallets (primary + comparisons) stay visible even when the
+  // current search no longer matches them.
+  const selectedIds = primary ? [primary, ...comparisons] : comparisons;
+  const pinned = selectedIds
+    .filter((id) => !found.some((wallet) => wallet.id === id))
+    .flatMap((id) => {
+      const wallet = getWallet(id);
+      return wallet ? [wallet] : [];
+    });
+  const shown = [...pinned, ...found];
 
   const byWallet = useMemo(() => {
     const map: Record<string, StrategyFingerprint | undefined> = {};
@@ -254,7 +249,7 @@ export function FocusTraderLabPage() {
         </p>
       )}
 
-      <PrepareWalletPanel wallets={wallets} />
+      <PrepareWalletPanel />
 
       <section className="panel" aria-labelledby="cohort-setup">
         <h2 id="cohort-setup">Focus cohort setup</h2>
@@ -303,8 +298,7 @@ export function FocusTraderLabPage() {
             return (
               <div className="wallet-choice" key={wallet.id}>
                 <span>
-                  {wallet.emoji} {wallet.label ?? shortAddr(wallet.address)}{' '}
-                  <span className="mono">{shortAddr(wallet.address)}</span>
+                  <WalletLabel wallet={wallet} />
                 </span>
                 <span className="toolbar">
                   <label className="check">
@@ -336,7 +330,7 @@ export function FocusTraderLabPage() {
             <h3>Comparison order</h3>
             <ol className="pattern-list">
               {comparisons.map((walletId, index) => {
-                const wallet = wallets.find((w) => w.id === walletId);
+                const wallet = getWallet(walletId);
                 const label = wallet?.label ?? shortAddr(wallet?.address ?? walletId);
                 return (
                   <li key={walletId}>

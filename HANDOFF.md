@@ -556,6 +556,65 @@ horizontally. Missing values show "unknown", never zero.
 evidence, leader/follower sequencing, and non-accusatory relationship
 heuristics.** Do not begin it implicitly.
 
+## Beginner UX Simplification Pass implementation notes
+
+- Frontend-only. No migration, no backend route, no financial calculation
+  changed. `prisma/schema.prisma` and `prisma/migrations/` untouched.
+- `apps/web/src/components/Sidebar.tsx`: `PageId` is now the union of every
+  Simple-Mode page id and every Quant-Mode page id (`wallets`/`tokens` are
+  shared literals, not duplicated pages). `SIMPLE_NAV` and `QUANT_NAV` are
+  separate exported arrays; `PAGES` (used for hash-route validation only)
+  includes every id from both so old bookmarks keep resolving, but
+  deliberately excludes `alerts`/`my-positions` — those are not real routes,
+  only disabled nav entries with a "Coming later" badge, mirroring the
+  pre-existing Quant `FUTURE_FEATURES` pattern.
+- `apps/web/src/App.tsx`: `pageFromHash(fallback)` takes the mode-appropriate
+  default (`home` for Simple, `overview` for Quant) as a parameter, computed
+  once at mount from `useMode()` (already synchronously hydrated from
+  `localStorage` by `ModeProvider`, so there is no default-flash). Switching
+  mode after mount never force-navigates away from the current page — only
+  the *initial*, blank-hash landing differs by mode. The mobile `top-nav` in
+  the topbar now renders the same mode-dependent list as `Sidebar`, so both
+  breakpoints stay in sync.
+- `apps/web/src/hooks/useWalletSearch.ts`: the fix for the wallet-picker
+  first-page bug. Always calls `/api/wallets?search=...` (the backend already
+  supported this — the bug was purely on the frontend). Keeps a
+  `Map<id, Wallet>` cache across every result it has ever returned, exposed
+  as `getWallet(id)`, so a selected wallet resolves correctly even after it
+  drops out of the current search results. Selection state is intentionally
+  NOT owned by the hook — each caller pins its own selected-but-not-shown
+  wallets into its render list via `getWallet` (see `WalletIntelligencePage`,
+  `FocusTraderLabPage`, `PrepareWalletPanel`, `LearnWalletPage` for the
+  identical `pinned = [...selected].filter(...).flatMap(getWallet)` pattern).
+  No debounce was added (`debounceMs` defaults to `0`) — at this wallet
+  count a fetch-per-keystroke is simple, correct and keeps tests
+  deterministic; the option exists if it's ever needed.
+- `apps/web/src/pages/LearnWalletPage.tsx` and
+  `apps/web/src/lib/prepareWording.ts` (`learnWalletSummary`,
+  `BEGINNER_STAGE_NAME`) are additive — the existing `stageLabel`/
+  `STAGE_REASON_TEXT` used by the Quant/Advanced `PrepareWalletPanel` were
+  not touched, so its exact stage labels, reasons and IDs are unchanged.
+- `test/bnSafety.test.tsx` is the single source of truth for the BN
+  requirement: no code anywhere strings-matches on the literal label `bn` to
+  assign a primary/main role, and `grep -rni "bn main"` across
+  `apps/web/src` and `apps/api/src` returns nothing.
+- Two vitest gotchas hit again while writing tests this pass (documented
+  previously too): (1) always run frontend vitest from `apps/web` — running
+  from the repo root gives `ReferenceError: window is not defined` since the
+  jsdom environment is configured per-workspace. (2) `getByLabelText` can
+  become ambiguous when a page's `<PageHeader subtitle>` text happens to
+  contain the same phrase as an input's `aria-label`; prefer
+  `getByPlaceholderText` or scope with `within()` when that happens.
+- `apps/web/src/pages/WalletsPage.tsx` and `TokensPage.tsx`: the pre-existing
+  Quant Mode JSX trees are reused as local `const` fragments
+  (`importSection`, `addOneWalletSection`, `rawTableSection` /
+  `snapshotSection`, `backfillSection`) so Quant Mode's exact original
+  markup and behavior stay byte-for-byte reachable, while Simple Mode
+  composes a different layout around the same state and handlers. Content
+  inside a closed `<details>` stays in the DOM (not removed) — tests that
+  need to assert something is genuinely hidden must check
+  `details.hasAttribute('open')`, not just element absence.
+
 ## One-click Focus Wallet Preparation implementation notes
 
 - No migration: `apps/api/src/services/focusWallets/{prepareWallets,prepareLock}.ts`

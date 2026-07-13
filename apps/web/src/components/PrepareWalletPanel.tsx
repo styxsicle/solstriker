@@ -8,10 +8,12 @@
  * recommends following, copying or trading anything.
  */
 import { useState } from 'react';
-import { api, type PrepareBatchResult, type PrepareWalletResult, type Wallet } from '../api';
+import { api, type PrepareBatchResult, type PrepareWalletResult } from '../api';
+import { useWalletSearch } from '../hooks/useWalletSearch';
 import { shortAddr } from '../lib/format';
 import { reasonText, stageLabel, type StageKind } from '../lib/prepareWording';
 import { ConfirmPrepareModal } from './ConfirmPrepareModal';
+import { WalletLabel } from './WalletLabel';
 
 const MAX_PREPARE_WALLETS = 5;
 const DEFAULT_TRANSACTION_LIMIT = '500';
@@ -85,8 +87,8 @@ function ResultCard({ result, onRetry }: { result: PrepareWalletResult; onRetry:
   );
 }
 
-export function PrepareWalletPanel({ wallets }: { wallets: Wallet[] }) {
-  const [search, setSearch] = useState('');
+export function PrepareWalletPanel() {
+  const { query: search, setQuery: setSearch, results: found, getWallet } = useWalletSearch({ includeDev: false });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [syncTransactionLimit, setSyncTransactionLimit] = useState(DEFAULT_TRANSACTION_LIMIT);
   const [continueHistoricalSync, setContinueHistoricalSync] = useState(false);
@@ -142,14 +144,14 @@ export function PrepareWalletPanel({ wallets }: { wallets: Wallet[] }) {
     setConfirming(true);
   }
 
-  const shown = wallets
-    .filter(
-      (wallet) =>
-        !search.trim() ||
-        (wallet.label ?? '').toLowerCase().includes(search.toLowerCase()) ||
-        wallet.address.toLowerCase().includes(search.toLowerCase()),
-    )
-    .slice(0, 25);
+  // Selected wallets stay visible (and checked) even if the current search no longer matches them.
+  const pinned = [...selected]
+    .filter((id) => !found.some((wallet) => wallet.id === id))
+    .flatMap((id) => {
+      const wallet = getWallet(id);
+      return wallet ? [wallet] : [];
+    });
+  const shown = [...pinned, ...found];
 
   return (
     <section className="panel" aria-labelledby="prepare-wallets">
@@ -182,8 +184,7 @@ export function PrepareWalletPanel({ wallets }: { wallets: Wallet[] }) {
               disabled={!selected.has(wallet.id) && selected.size >= MAX_PREPARE_WALLETS}
               onChange={() => toggle(wallet.id)}
             />
-            {wallet.emoji} {wallet.label ?? shortAddr(wallet.address)}{' '}
-            <span className="mono">{shortAddr(wallet.address)}</span>
+            <WalletLabel wallet={wallet} />
           </label>
         ))}
       </div>

@@ -150,6 +150,33 @@ signing, and real trades.
   1–5 wallets, sequential, per-stage skip-when-current logic, per-wallet failure
   isolation, no new migration (reuses existing services directly)
 
+### ✅ Beginner UX Simplification Pass (complete)
+
+- New Simple Mode navigation (Home · Wallets · Coin Check · Alerts · My
+  Positions · Advanced); Alerts/My Positions render disabled with "Coming
+  later," never navigable, no backend route. Quant Mode's original nav is
+  unchanged; every old hash route still renders directly.
+- Home (four beginner action cards + a small research-status summary) and
+  Advanced (a plain directory to the five existing detailed pages) replace
+  Simple Mode's old technical-dashboard-first landing page — no page removed.
+- Learn a wallet: a beginner-only wrapper around the existing one-click
+  preparation endpoint/services (no pipeline duplication), plain-language
+  stage names and a narrative completion summary, Advanced options collapsed
+  with unchanged defaults.
+- Fixed three wallet pickers (`WalletIntelligencePage`, `FocusTraderLabPage`,
+  `PrepareWalletPanel`) that filtered a locally cached first page instead of
+  using the backend's existing server-side search; added a shared
+  `useWalletSearch` hook and `WalletLabel` component.
+- BN wallet safety: no wallet is ever auto-assigned a "BN Main" role; `bn
+  trezor` is explicitly not BN Main; enforced by `test/bnSafety.test.tsx`.
+- Wallets and Coin Check (Tokens) simplified in Simple Mode: search-first,
+  plain-language status, small field sets, bulk import/dev records/provider
+  detail moved under "Advanced" disclosures — nothing removed, Quant Mode
+  unchanged. Coin Check states prominently that full token safety checks are
+  not built yet.
+- Frontend-only: no backend calculation, financial value or database schema
+  changed; no new migration.
+
 ### ⏭ Phase 2C-B — Related-wallet funding relationships, shared-entry timing evidence, leader/follower sequencing, and non-accusatory relationship heuristics (next checkpoint)
 
 - Funding-transfer evidence between user-selected wallets, stated as observations

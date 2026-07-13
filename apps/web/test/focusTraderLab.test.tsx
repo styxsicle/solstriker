@@ -23,7 +23,11 @@ function stub(options: { cohorts?: unknown[]; fingerprints?: unknown[] } = {}) {
       if (init?.body) posted.push({ url, body: JSON.parse(String(init.body)) });
       let body: any = {};
       if (url.includes('/api/wallets')) {
-        body = { items: WALLETS, page: 1, pageSize: 200, total: WALLETS.length, stats: { total: 3, enabled: 3 }, groups: [] };
+        const search = (new URL(url, 'http://localhost').searchParams.get('search') ?? '').toLowerCase();
+        const items = WALLETS.filter(
+          (w) => !search || (w.label ?? '').toLowerCase().includes(search) || w.address.toLowerCase().includes(search),
+        );
+        body = { items, page: 1, pageSize: 200, total: items.length, stats: { total: 3, enabled: 3 }, groups: [] };
       } else if (url.includes('/api/wallet-strategies/analyze')) {
         body = { runId: 'strategy-run-1', calculationVersion: 1, status: 'COMPLETED', requestedWallets: 1, processedWallets: 1, fingerprintsCreated: 1, patternsCreated: 6, eligibleCycles: 5, excludedCycles: 1, warnings: 2, failures: 0, results: [] };
       } else if (url.includes('/api/wallet-strategies')) {
@@ -81,8 +85,8 @@ describe('Focus Trader Lab — cohort setup', () => {
     view();
     await waitFor(() => expect(cohortSetup().getByText(/unrelated research wallet/)).toBeTruthy());
     fireEvent.change(cohortSetup().getByLabelText('Search tracked wallets'), { target: { value: 'bn' } });
+    await waitFor(() => expect(cohortSetup().queryByText(/unrelated research wallet/)).toBeNull());
     expect(cohortSetup().getByText(/bn trezor/)).toBeTruthy();
-    expect(cohortSetup().queryByText(/unrelated research wallet/)).toBeNull();
     // Nothing was selected merely because the labels matched "bn".
     expect(cohortSetup().getByText('0 primary · 0 / 9 comparison wallets')).toBeTruthy();
     expect(cohortSetup().getByText(/Select exactly one primary wallet/)).toBeTruthy();

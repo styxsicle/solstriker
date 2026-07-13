@@ -51,15 +51,33 @@ function makeResult(overrides: Partial<PrepareBatchResult> = {}): PrepareBatchRe
 
 let posted: any[] = [];
 
-function stub(result: PrepareBatchResult = makeResult()) {
+/** Routes by URL: /api/wallets serves the search list, /prepare serves the result. */
+function stub(result: PrepareBatchResult = makeResult(), wallets: Wallet[] = WALLETS) {
   posted = [];
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
       if (init?.body) posted.push(JSON.parse(String(init.body)));
-      return new Response(JSON.stringify(result), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (url.includes('/api/focus-wallets/prepare')) {
+        return new Response(JSON.stringify(result), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      const params = new URL(url, 'http://localhost').searchParams;
+      const search = (params.get('search') ?? '').toLowerCase();
+      const items = wallets.filter(
+        (w) => !search || (w.label ?? '').toLowerCase().includes(search) || w.address.toLowerCase().includes(search),
+      );
+      return new Response(
+        JSON.stringify({ items, page: 1, pageSize: 25, total: items.length, stats: { total: wallets.length, enabled: wallets.length }, groups: [] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     }),
   );
+}
+
+async function view() {
+  render(<PrepareWalletPanel />);
+  await waitFor(() => expect(screen.getAllByRole('checkbox').length).toBeGreaterThan(0));
 }
 
 beforeEach(() => {
@@ -70,7 +88,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('Prepare wallet research', () => {
   it('explains what preparation does and requires confirmation before syncing', async () => {
     stub();
-    render(<PrepareWalletPanel wallets={WALLETS} />);
+    await view();
     expect(
       screen.getByText(
         'This downloads public activity and prepares research data. It does not place trades, connect a wallet, or recommend copying the selected wallets.',
@@ -90,16 +108,16 @@ describe('Prepare wallet research', () => {
 
   it('sends the request only after confirming, with the selected wallets and options', async () => {
     stub();
-    render(<PrepareWalletPanel wallets={WALLETS} />);
+    await view();
     fireEvent.click(screen.getAllByRole('checkbox')[0]);
-    fireEvent.click(screen.getByLabelText('Transaction limit per wallet'));
     fireEvent.change(screen.getByLabelText('Transaction limit per wallet'), { target: { value: '250' } });
     fireEvent.click(screen.getByLabelText('Continue older history'));
     fireEvent.click(screen.getByRole('button', { name: 'Prepare selected wallets' }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and prepare' })); // the modal's confirm button
 
-    await waitFor(() => expect(posted.length).toBe(1));
-    expect(posted[0]).toMatchObject({
+    await waitFor(() => expect(posted.some((p) => p.walletIds)).toBe(true));
+    const prepareCall = posted.find((p) => p.walletIds);
+    expect(prepareCall).toMatchObject({
       walletIds: ['wallet-1'],
       syncTransactionLimit: 250,
       continueHistoricalSync: true,
@@ -107,44 +125,48 @@ describe('Prepare wallet research', () => {
     });
   });
 
-  it('defaults the transaction limit to 500', () => {
+  it('defaults the transaction limit to 500', async () => {
     stub();
-    render(<PrepareWalletPanel wallets={WALLETS} />);
+    await view();
     expect((screen.getByLabelText('Transaction limit per wallet') as HTMLInputElement).value).toBe('500');
   });
 
-  it('limits selection to five wallets', () => {
+  it('limits selection to five wallets', async () => {
     const many: Wallet[] = Array.from({ length: 6 }, (_, i) => ({
       ...WALLETS[0],
       id: `w${i}`,
       address: `FAKEwa11etAddressForTests${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}${i}`,
       label: `wallet ${i}`,
     }));
-    stub();
-    render(<PrepareWalletPanel wallets={many} />);
+    stub(makeResult(), many);
+    await view();
     const boxes = screen.getAllByRole('checkbox');
     for (let i = 0; i < 5; i += 1) fireEvent.click(boxes[i]);
     expect(screen.getByText('5 / 5 selected')).toBeTruthy();
     expect((boxes[5] as HTMLInputElement).disabled).toBe(true);
   });
 
-  it('preserves selected wallets when the search query changes', () => {
+  it('preserves selected wallets when the search query changes, and shows them again when the search is cleared', async () => {
     stub();
-    render(<PrepareWalletPanel wallets={WALLETS} />);
+    await view();
     fireEvent.click(screen.getAllByRole('checkbox')[0]); // selects "bn trezor"
     expect(screen.getByText('1 / 5 selected')).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Search wallets to prepare'), { target: { value: 'unrelated' } });
+    await waitFor(() => expect(screen.getByText(/unrelated research wallet/)).toBeTruthy());
     expect(screen.getByText('1 / 5 selected')).toBeTruthy(); // selection unchanged though the list is filtered
-    expect(screen.queryByText(/bn trezor/)).toBeNull(); // filtered out of view, but still selected
+    // The selected wallet remains visible (pinned) even though it no longer matches the search.
+    expect(screen.getByText(/bn trezor/)).toBeTruthy();
+    expect((screen.getAllByRole('checkbox')[0] as HTMLInputElement).checked).toBe(true);
 
     fireEvent.change(screen.getByLabelText('Search wallets to prepare'), { target: { value: '' } });
+    await waitFor(() => expect(screen.getByText(/unrelated research wallet/)).toBeTruthy());
     expect((screen.getAllByRole('checkbox')[0] as HTMLInputElement).checked).toBe(true);
   });
 
   it('shows readable progress statuses for each stage after preparation completes', async () => {
     stub();
-    render(<PrepareWalletPanel wallets={WALLETS} />);
+    await view();
     fireEvent.click(screen.getAllByRole('checkbox')[0]);
     fireEvent.click(screen.getAllByRole('checkbox')[1]);
     fireEvent.click(screen.getByRole('button', { name: 'Prepare selected wallets' }));
@@ -182,7 +204,7 @@ describe('Prepare wallet research', () => {
         ],
       }),
     );
-    render(<PrepareWalletPanel wallets={WALLETS} />);
+    await view();
     fireEvent.click(screen.getAllByRole('checkbox')[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Prepare selected wallets' }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and prepare' }));
@@ -216,7 +238,7 @@ describe('Prepare wallet research', () => {
         ],
       }),
     );
-    render(<PrepareWalletPanel wallets={WALLETS} />);
+    await view();
     fireEvent.click(screen.getAllByRole('checkbox')[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Prepare selected wallets' }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and prepare' }));
@@ -229,7 +251,7 @@ describe('Prepare wallet research', () => {
 
   it('re-selects only the failed wallet when retrying', async () => {
     stub();
-    render(<PrepareWalletPanel wallets={WALLETS} />);
+    await view();
     fireEvent.click(screen.getAllByRole('checkbox')[0]);
     fireEvent.click(screen.getAllByRole('checkbox')[1]);
     fireEvent.click(screen.getByRole('button', { name: 'Prepare selected wallets' }));
@@ -244,7 +266,7 @@ describe('Prepare wallet research', () => {
 
   it('links to Wallet Intelligence after completion', async () => {
     stub();
-    render(<PrepareWalletPanel wallets={WALLETS} />);
+    await view();
     fireEvent.click(screen.getAllByRole('checkbox')[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Prepare selected wallets' }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and prepare' }));
@@ -255,7 +277,7 @@ describe('Prepare wallet research', () => {
 
   it('never shows ranking, copy-recommendation, prediction or trading language', async () => {
     stub();
-    render(<PrepareWalletPanel wallets={WALLETS} />);
+    await view();
     fireEvent.click(screen.getAllByRole('checkbox')[0]);
     fireEvent.click(screen.getAllByRole('checkbox')[1]);
     fireEvent.click(screen.getByRole('button', { name: 'Prepare selected wallets' }));

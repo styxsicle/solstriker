@@ -1,8 +1,46 @@
+import { useMode } from '../lib/mode';
 import { ModeToggle } from './ModeToggle';
 
-export type PageId = 'overview' | 'wallets' | 'activity' | 'tokens' | 'intelligence' | 'focus' | 'help';
+/**
+ * Every page the app can render. Old bookmarked hash routes (`#/overview`,
+ * `#/activity`, etc.) keep working regardless of the current mode — only the
+ * PRIMARY navigation list shown to the user differs between Simple and Quant
+ * Mode. `wallets` and `tokens` are deliberately shared between both navigation
+ * sets: the same page adapts its own content to the mode (see WalletsPage,
+ * TokensPage).
+ */
+export type PageId =
+  | 'home'
+  | 'wallets'
+  | 'tokens'
+  | 'learn-wallet'
+  | 'advanced'
+  | 'overview'
+  | 'activity'
+  | 'intelligence'
+  | 'focus'
+  | 'help';
 
-export const PAGES: { id: PageId; label: string; icon: string }[] = [
+export interface NavItem {
+  id: PageId;
+  label: string;
+  icon: string;
+  /** Not implemented yet — shown but never navigable. */
+  disabled?: boolean;
+}
+
+/** Simple Mode's beginner-oriented primary navigation. */
+export const SIMPLE_NAV: NavItem[] = [
+  { id: 'home', label: 'Home', icon: '⌂' },
+  { id: 'wallets', label: 'Wallets', icon: '◈' },
+  { id: 'tokens', label: 'Coin Check', icon: '❖' },
+  { id: 'alerts' as PageId, label: 'Alerts', icon: '🔔', disabled: true },
+  { id: 'my-positions' as PageId, label: 'My Positions', icon: '◫', disabled: true },
+  { id: 'advanced', label: 'Advanced', icon: '⚙' },
+];
+
+/** Quant Mode keeps every existing technical page as a primary destination. */
+export const QUANT_NAV: NavItem[] = [
   { id: 'overview', label: 'Overview', icon: '◎' },
   { id: 'wallets', label: 'Wallets', icon: '◈' },
   { id: 'activity', label: 'Activity', icon: '↯' },
@@ -12,12 +50,15 @@ export const PAGES: { id: PageId; label: string; icon: string }[] = [
   { id: 'help', label: 'Help', icon: '✚' },
 ];
 
-export const FUTURE_FEATURES = [
-  'Signals',
-  'Coin Analyzer',
-  'Backtesting',
-  'Alerts',
+/** All page IDs valid for direct hash navigation, regardless of mode. */
+export const PAGES: NavItem[] = [
+  ...QUANT_NAV,
+  { id: 'home', label: 'Home', icon: '⌂' },
+  { id: 'learn-wallet', label: 'Learn a wallet', icon: '⌂' },
+  { id: 'advanced', label: 'Advanced', icon: '⚙' },
 ];
+
+export const FUTURE_FEATURES = ['Signals', 'Coin Analyzer', 'Backtesting', 'Alerts'];
 
 interface SidebarProps {
   page: PageId;
@@ -25,6 +66,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ page, onNavigate }: SidebarProps) {
+  const { mode } = useMode();
+  const items = mode === 'simple' ? SIMPLE_NAV : QUANT_NAV;
+
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -33,39 +77,45 @@ export function Sidebar({ page, onNavigate }: SidebarProps) {
       </div>
 
       <nav aria-label="Main navigation" className="side-nav">
-        {PAGES.map((p) => (
+        {items.map((item) => (
           <button
-            key={p.id}
-            className={`nav-item ${page === p.id ? 'active' : ''}`}
-            aria-current={page === p.id ? 'page' : undefined}
-            onClick={() => onNavigate(p.id)}
+            key={item.id}
+            className={`nav-item ${page === item.id ? 'active' : ''} ${item.disabled ? 'disabled' : ''}`}
+            aria-current={!item.disabled && page === item.id ? 'page' : undefined}
+            disabled={item.disabled}
+            aria-disabled={item.disabled ? 'true' : undefined}
+            title={item.disabled ? 'Coming later' : undefined}
+            onClick={() => !item.disabled && onNavigate(item.id)}
           >
             <span className="nav-icon" aria-hidden="true">
-              {p.icon}
+              {item.icon}
             </span>
-            {p.label}
+            {item.label}
+            {item.disabled && <span className="badge muted">Coming later</span>}
           </button>
         ))}
       </nav>
 
-      <div className="side-section" aria-label="Planned features (not implemented)">
-        <div className="side-section-title">Coming later</div>
-        {FUTURE_FEATURES.map((name) => (
-          <button
-            key={name}
-            className="nav-item disabled"
-            disabled
-            aria-disabled="true"
-            title="Not implemented yet"
-          >
-            <span className="nav-icon" aria-hidden="true">
-              ·
-            </span>
-            {name}
-            <span className="badge muted">not built</span>
-          </button>
-        ))}
-      </div>
+      {mode === 'quant' && (
+        <div className="side-section" aria-label="Planned features (not implemented)">
+          <div className="side-section-title">Coming later</div>
+          {FUTURE_FEATURES.map((name) => (
+            <button
+              key={name}
+              className="nav-item disabled"
+              disabled
+              aria-disabled="true"
+              title="Not implemented yet"
+            >
+              <span className="nav-icon" aria-hidden="true">
+                ·
+              </span>
+              {name}
+              <span className="badge muted">not built</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="sidebar-footer">
         <ModeToggle />

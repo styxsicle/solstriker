@@ -1,7 +1,7 @@
 // Mounts every page in both modes against mocked APIs — catches runtime
 // rendering errors and verifies the key beginner/technical content appears.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ModeProvider } from '../src/lib/mode';
 import { OverviewPage } from '../src/pages/OverviewPage';
 import { WalletsPage } from '../src/pages/WalletsPage';
@@ -112,11 +112,18 @@ describe('page smoke rendering', () => {
     expect(screen.getByText('Latency')).toBeTruthy();
   });
 
-  it('Wallets page shows the import steps and the no-private-key explanation', async () => {
+  it('Wallets page leads with search and the no-private-key explanation in Simple Mode', async () => {
     withMode('simple', <WalletsPage />);
     await waitFor(() =>
-      expect(screen.getByText(/never needs its private key or seed phrase/)).toBeTruthy(),
+      expect(screen.getByText(/never needs a private key or seed phrase/)).toBeTruthy(),
     );
+    expect(screen.getByText('Search wallets')).toBeTruthy();
+    expect(screen.getByText('Add one wallet')).toBeTruthy();
+    // Bulk import, dev records and the raw table move under an Advanced disclosure — not removed, just relocated (collapsed by default).
+    const advanced = screen.getByText('Advanced wallet management').closest('details');
+    expect(advanced?.hasAttribute('open')).toBe(false);
+    fireEvent.click(screen.getByText('Advanced wallet management'));
+    expect(advanced?.hasAttribute('open')).toBe(true);
     expect(screen.getByText('Import wallets')).toBeTruthy();
     expect(screen.getByText('Supported file formats')).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: /show development records/i })).toBeTruthy();

@@ -86,3 +86,66 @@ export interface PreparedStages {
   quality: PrepareQualityStage;
   fingerprint: PrepareFingerprintStage;
 }
+
+// --- Beginner "Learn a wallet" wording ---
+// Maps the same four pipeline stages to plain phase names for Simple Mode.
+// Quant Mode keeps the exact existing stage statuses, reasons, counts, IDs
+// and warnings untouched (see StageKind / stageLabel above).
+
+export const BEGINNER_STAGE_NAME: Record<StageKind, string> = {
+  sync: 'Download public trades',
+  reconstruction: 'Organize buys and sells',
+  quality: 'Check past results',
+  fingerprint: 'Learn trading style',
+};
+
+export interface LearnWalletSummary {
+  /** One plain sentence per pipeline stage, in order. */
+  sentences: string[];
+  /** Plain "what to inspect next" suggestions. */
+  nextSteps: string[];
+  /** True if every stage produced usable evidence (not just "ran without error"). */
+  fullyLearned: boolean;
+}
+
+function sentenceFor(kind: StageKind, stage: MinimalStage, extra?: { eligible?: number | null; backfillComplete?: boolean | null }): string {
+  const name = BEGINNER_STAGE_NAME[kind];
+  if (stage.status === 'SKIPPED') return `${name}: already done — nothing new was needed.`;
+  if (stage.status === 'FAILED') return `${name}: could not finish this time. You can retry.`;
+  if (stage.status === 'NOT_STARTED') return `${name}: not attempted, because an earlier step did not finish.`;
+  // COMPLETED
+  if (kind === 'sync') {
+    return extra?.backfillComplete
+      ? `${name}: done. Enough history exists to study this wallet.`
+      : `${name}: done, but only part of this wallet's history has been downloaded so far.`;
+  }
+  if ((kind === 'quality' || kind === 'fingerprint') && (extra?.eligible ?? 0) === 0) {
+    return `${name}: attempted, but there was not yet enough usable evidence.`;
+  }
+  return `${name}: done.`;
+}
+
+/** Builds the plain-English "what happened" summary for one prepared wallet. */
+export function learnWalletSummary(result: PreparedStages & { backfillComplete: boolean }): LearnWalletSummary {
+  const sentences = [
+    sentenceFor('sync', result.sync, { backfillComplete: result.backfillComplete }),
+    sentenceFor('reconstruction', result.reconstruction),
+    sentenceFor('quality', result.quality, { eligible: result.quality.eligiblePositions }),
+    sentenceFor('fingerprint', result.fingerprint, { eligible: result.fingerprint.eligibleCycleCount }),
+  ];
+  const fullyLearned =
+    result.sync.status !== 'FAILED' &&
+    result.reconstruction.status === 'COMPLETED' &&
+    (result.fingerprint.status === 'COMPLETED' || result.fingerprint.status === 'SKIPPED') &&
+    (result.fingerprint.eligibleCycleCount ?? 0) > 0;
+  const nextSteps = fullyLearned
+    ? [
+        'Open Wallet Intelligence (Advanced) for the detailed buy/sell breakdown.',
+        'Open Focus Trader Lab (Advanced) for the full trading-style summary.',
+      ]
+    : [
+        'Try again later, or with a higher transaction limit, to gather more history.',
+        'Not enough evidence yet does not mean the wallet is untrustworthy — it means history is still incomplete.',
+      ];
+  return { sentences, nextSteps, fullyLearned };
+}

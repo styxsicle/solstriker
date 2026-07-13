@@ -89,49 +89,60 @@ function Field({
   );
 }
 
+/** The small set of fields a beginner sees first. Everything else — provider
+ * identity, pair-selection detail, raw snapshot status, exact timestamps —
+ * moves into "More details" or Quant Mode. */
 function SimpleMarket({ market }: { market: MarketSnapshot }) {
   const fresh = freshnessInfo(market.freshness);
   return (
-    <div className="market-grid">
-      <Field
-        label="Price (USD)"
-        value={market.priceUsd === null ? MISSING_FIELD_TEXT : formatUsd(market.priceUsd)}
-      />
-      <Field label="Market cap" value={formatUsd(market.marketCapUsd)} title={MARKET_DEFINITIONS.marketCap} />
-      <Field label="FDV" value={formatUsd(market.fdvUsd)} title={MARKET_DEFINITIONS.fdv} />
-      <Field label="Liquidity" value={formatUsd(market.liquidityUsd)} title={MARKET_DEFINITIONS.liquidity} />
-      <Field label="Volume (24h)" value={formatUsd(market.volume24hUsd)} title={MARKET_DEFINITIONS.volume} />
-      <Field
-        label="Price change (1h)"
-        value={formatPct(market.priceChange1hPct)}
-        title={MARKET_DEFINITIONS.priceChange}
-        tone={`status-${pctTone(market.priceChange1hPct)}`}
-      />
-      <Field
-        label="Price change (24h)"
-        value={formatPct(market.priceChange24hPct)}
-        title={MARKET_DEFINITIONS.priceChange}
-        tone={`status-${pctTone(market.priceChange24hPct)}`}
-      />
-      <Field label="DEX" value={market.dex ?? MISSING_FIELD_TEXT} />
-      <Field
-        label="Pair"
-        value={market.pairAddress ? shortAddr(market.pairAddress) : MISSING_FIELD_TEXT}
-      />
-      <Field
-        label="Last collected"
-        value={formatTime(market.observedAt)}
-        title={MARKET_DEFINITIONS.freshness}
-      />
-      <Field label="Freshness" value={fresh.label} tone={`status-${fresh.tone}`} title={MARKET_DEFINITIONS.freshness} />
-      <Field label="Provider" value={market.source} />
-    </div>
+    <>
+      <div className="market-grid">
+        <Field
+          label="Price (USD)"
+          value={market.priceUsd === null ? MISSING_FIELD_TEXT : formatUsd(market.priceUsd)}
+        />
+        <Field label="Market cap" value={formatUsd(market.marketCapUsd)} title={MARKET_DEFINITIONS.marketCap} />
+        <Field label="Liquidity" value={formatUsd(market.liquidityUsd)} title={MARKET_DEFINITIONS.liquidity} />
+        <Field label="Volume (24h)" value={formatUsd(market.volume24hUsd)} title={MARKET_DEFINITIONS.volume} />
+        <Field
+          label="Price change (24h)"
+          value={formatPct(market.priceChange24hPct)}
+          title={MARKET_DEFINITIONS.priceChange}
+          tone={`status-${pctTone(market.priceChange24hPct)}`}
+        />
+        <Field label="Freshness" value={fresh.label} tone={`status-${fresh.tone}`} title={MARKET_DEFINITIONS.freshness} />
+      </div>
+      <details className="helper">
+        <summary>More details</summary>
+        <div className="market-grid">
+          <Field label="FDV" value={formatUsd(market.fdvUsd)} title={MARKET_DEFINITIONS.fdv} />
+          <Field
+            label="Price change (1h)"
+            value={formatPct(market.priceChange1hPct)}
+            title={MARKET_DEFINITIONS.priceChange}
+            tone={`status-${pctTone(market.priceChange1hPct)}`}
+          />
+          <Field label="DEX" value={market.dex ?? MISSING_FIELD_TEXT} />
+          <Field
+            label="Pair"
+            value={market.pairAddress ? shortAddr(market.pairAddress) : MISSING_FIELD_TEXT}
+          />
+          <Field
+            label="Last collected"
+            value={formatTime(market.observedAt)}
+            title={MARKET_DEFINITIONS.freshness}
+          />
+          <Field label="Provider" value={market.source} />
+        </div>
+      </details>
+    </>
   );
 }
 
 export function TokensPage() {
   const { mode } = useMode();
   const [data, setData] = useState<TokenListResponse | null>(null);
+  const [search, setSearch] = useState('');
   const [showDev, setShowDev] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -162,6 +173,23 @@ export function TokensPage() {
     () => (data?.items ?? []).filter((t) => t.source !== 'dev-seed'),
     [data],
   );
+
+  // Every token is already loaded (the backend returns the full list, no
+  // pagination), so a client-side filter here is a real search over all
+  // discovered tokens — not the "first page only" bug pattern. Respects the
+  // existing includeDev fetch param rather than unconditionally excluding
+  // development records.
+  const searched = useMemo(() => {
+    const source = data?.items ?? [];
+    const needle = search.trim().toLowerCase();
+    if (!needle) return source;
+    return source.filter(
+      (t) =>
+        (t.name ?? '').toLowerCase().includes(needle) ||
+        (t.symbol ?? '').toLowerCase().includes(needle) ||
+        t.mintAddress.toLowerCase().includes(needle),
+    );
+  }, [data, search]);
 
   function toggle(id: string, isDev: boolean) {
     if (isDev) return; // dev tokens are never refreshable
@@ -237,17 +265,153 @@ export function TokensPage() {
 
   const atLimit = selected.size >= MAX_SELECTED;
 
+  const snapshotSection = (
+    <section className="panel" aria-labelledby="tokens-refresh">
+      <h2 id="tokens-refresh">Collect market snapshots</h2>
+      <p className="panel-sub">
+        Select up to <strong>{MAX_SELECTED} tokens</strong> and collect a current market snapshot
+        for each. Start with 1–5 tokens. Development tokens cannot be refreshed.
+      </p>
+      <div className="toolbar" role="group" aria-label="Snapshot selection controls">
+        <button className="btn secondary" onClick={selectVisible} disabled={eligible.length === 0}>
+          Select visible tokens
+        </button>
+        <button className="btn secondary" onClick={clearSelection} disabled={selected.size === 0}>
+          Clear selection
+        </button>
+        <span className={`badge ${atLimit ? 'warn' : 'muted'}`} aria-live="polite">
+          {selected.size} / {MAX_SELECTED} selected
+        </span>
+        <button
+          className="btn"
+          onClick={() => void refreshSelected()}
+          disabled={selected.size === 0 || refreshing}
+          aria-busy={refreshing}
+        >
+          {refreshing ? 'Collecting…' : `Refresh ${selected.size || ''} selected`}
+        </button>
+      </div>
+      {atLimit && (
+        <p className="panel-sub" role="status">
+          You have reached the {MAX_SELECTED}-token maximum for one refresh.
+        </p>
+      )}
+      {refreshResult && (
+        <div className="import-summary" role="status">
+          <span className="status-good">
+            <strong>{refreshResult.complete}</strong> complete
+          </span>
+          <span className="status-warn">
+            <strong>{refreshResult.partial}</strong> partial
+          </span>
+          <span className="status-muted">
+            <strong>{refreshResult.notFound}</strong> no pair found
+          </span>
+          <span className="status-bad">
+            <strong>{refreshResult.failed}</strong> failed
+          </span>
+          <span className="status-muted">provider: {refreshResult.provider}</span>
+        </div>
+      )}
+    </section>
+  );
+
+  const backfillSection = (
+    <section className="panel" aria-labelledby="tokens-backfill">
+      <h2 id="tokens-backfill">Collect historical candles</h2>
+      <p className="panel-sub">
+        Download historical price candles for a token's current market pair, then later measure
+        what happened after each tracked-wallet buy. Uses the tokens selected above (max{' '}
+        <strong>{MAX_BACKFILL}</strong>; start with 1–2). This is historical evidence only — not a
+        prediction.
+      </p>
+      {backfillError && (
+        <p className="notice danger" role="alert">
+          {backfillError}
+        </p>
+      )}
+      <div className="toolbar" role="group" aria-label="Historical backfill controls">
+        <label className="field">
+          Interval
+          <select
+            value={interval}
+            onChange={(e) => setInterval(e.target.value as (typeof INTERVALS)[number])}
+          >
+            {INTERVALS.map((iv) => (
+              <option key={iv} value={iv}>
+                {iv}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          Start (UTC)
+          <input
+            type="datetime-local"
+            value={range.start}
+            onChange={(e) => setRange((r) => ({ ...r, start: e.target.value }))}
+          />
+        </label>
+        <label className="field">
+          End (UTC)
+          <input
+            type="datetime-local"
+            value={range.end}
+            onChange={(e) => setRange((r) => ({ ...r, end: e.target.value }))}
+          />
+        </label>
+        <button
+          className="btn"
+          style={{ alignSelf: 'flex-end' }}
+          onClick={() => void backfillSelected()}
+          disabled={selected.size === 0 || selected.size > MAX_BACKFILL || backfilling}
+          aria-busy={backfilling}
+        >
+          {backfilling ? 'Collecting…' : `Backfill ${selected.size || ''} selected`}
+        </button>
+      </div>
+      {selected.size > MAX_BACKFILL && (
+        <p className="panel-sub status-warn" role="status">
+          Select at most {MAX_BACKFILL} tokens to backfill candles.
+        </p>
+      )}
+      {backfillResult && (
+        <div className="import-summary" role="status">
+          <span className="status-good">
+            <strong>{backfillResult.complete}</strong> complete
+          </span>
+          <span className="status-warn">
+            <strong>{backfillResult.partial}</strong> partial
+          </span>
+          <span className="status-muted">
+            <strong>{backfillResult.notFound}</strong> no pair/candles
+          </span>
+          <span className="status-bad">
+            <strong>{backfillResult.failed}</strong> failed
+          </span>
+          <span className="status-muted">
+            <strong>{backfillResult.candlesInserted}</strong> candles added
+          </span>
+          <span className="status-muted">
+            <strong>{backfillResult.gapCount}</strong> gaps
+          </span>
+        </div>
+      )}
+    </section>
+  );
+
   return (
     <div>
       <PageHeader
-        title="Tokens"
-        subtitle="Tokens appear here after they are discovered through synchronized wallet activity. You can collect a current market snapshot for a few at a time."
+        title={mode === 'simple' ? 'Coin Check' : 'Tokens'}
+        subtitle="Tokens appear here only after they are discovered through synchronized wallet activity — this is not a live token scanner."
       />
 
-      <p className="notice info" role="note">
-        Historical research only. Market snapshots are collected manually and are not predictions.
-        Token safety, bundle analysis, holder analysis, and price forecasts are{' '}
-        <strong>not implemented</strong>.
+      <p className="notice warn" role="note">
+        <strong>Full token safety checks are not built yet.</strong> Contract safety, bundle
+        analysis, holder analysis, creator-history analysis, sellability checks and price
+        predictions are all <strong>not implemented</strong>. Market snapshots below are collected
+        manually and are historical evidence only.
       </p>
 
       {error && (
@@ -256,199 +420,75 @@ export function TokensPage() {
         </p>
       )}
 
-      {mode === 'simple' && (
-        <details className="helper">
-          <summary>What do these fields mean?</summary>
-          <ul>
-            <li>
-              <strong>Token mint</strong>: the token's public Solana identifier (like a contract
-              address).
-            </li>
-            <li>
-              <strong>Market cap</strong>: {MARKET_DEFINITIONS.marketCap}
-            </li>
-            <li>
-              <strong>FDV</strong>: {MARKET_DEFINITIONS.fdv}
-            </li>
-            <li>
-              <strong>Liquidity</strong>: {MARKET_DEFINITIONS.liquidity}
-            </li>
-            <li>
-              <strong>Volume</strong>: {MARKET_DEFINITIONS.volume}
-            </li>
-            <li>
-              <strong>Price change</strong>: {MARKET_DEFINITIONS.priceChange}
-            </li>
-            <li>
-              <strong>Freshness</strong>: {MARKET_DEFINITIONS.freshness}
-            </li>
-          </ul>
-        </details>
+      {mode === 'simple' ? (
+        <>
+          <section className="panel" aria-labelledby="tokens-search">
+            <h2 id="tokens-search">Search discovered tokens</h2>
+            <label className="field">
+              Search
+              <input
+                type="text"
+                placeholder="Name, symbol or mint address"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </label>
+            <SimpleTokenList
+              tokens={searched}
+              selected={selected}
+              atLimit={atLimit}
+              onToggle={toggle}
+            />
+          </section>
+
+          <details className="helper advanced-disclosure">
+            <summary>Advanced token research options</summary>
+            {snapshotSection}
+            {backfillSection}
+            <section className="panel">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={showDev}
+                  onChange={(e) => {
+                    setShowDev(e.target.checked);
+                    setSelected(new Set());
+                  }}
+                />
+                Show development records
+              </label>
+            </section>
+          </details>
+        </>
+      ) : (
+        <>
+          {snapshotSection}
+          {backfillSection}
+
+          <section className="panel" aria-labelledby="tokens-table">
+            <div className="toolbar" style={{ justifyContent: 'space-between' }}>
+              <h2 id="tokens-table">Discovered tokens {data ? `(${data.total.toLocaleString()})` : ''}</h2>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={showDev}
+                  onChange={(e) => {
+                    setShowDev(e.target.checked);
+                    setSelected(new Set());
+                  }}
+                />
+                Show development records
+              </label>
+            </div>
+            <QuantTokenTable
+              tokens={data?.items ?? null}
+              selected={selected}
+              atLimit={atLimit}
+              onToggle={toggle}
+            />
+          </section>
+        </>
       )}
-
-      <section className="panel" aria-labelledby="tokens-refresh">
-        <h2 id="tokens-refresh">Collect market snapshots</h2>
-        <p className="panel-sub">
-          Select up to <strong>{MAX_SELECTED} tokens</strong> and collect a current market snapshot
-          for each. Start with 1–5 tokens. Development tokens cannot be refreshed.
-        </p>
-        <div className="toolbar" role="group" aria-label="Snapshot selection controls">
-          <button className="btn secondary" onClick={selectVisible} disabled={eligible.length === 0}>
-            Select visible tokens
-          </button>
-          <button className="btn secondary" onClick={clearSelection} disabled={selected.size === 0}>
-            Clear selection
-          </button>
-          <span className={`badge ${atLimit ? 'warn' : 'muted'}`} aria-live="polite">
-            {selected.size} / {MAX_SELECTED} selected
-          </span>
-          <button
-            className="btn"
-            onClick={() => void refreshSelected()}
-            disabled={selected.size === 0 || refreshing}
-            aria-busy={refreshing}
-          >
-            {refreshing ? 'Collecting…' : `Refresh ${selected.size || ''} selected`}
-          </button>
-        </div>
-        {atLimit && (
-          <p className="panel-sub" role="status">
-            You have reached the {MAX_SELECTED}-token maximum for one refresh.
-          </p>
-        )}
-        {refreshResult && (
-          <div className="import-summary" role="status">
-            <span className="status-good">
-              <strong>{refreshResult.complete}</strong> complete
-            </span>
-            <span className="status-warn">
-              <strong>{refreshResult.partial}</strong> partial
-            </span>
-            <span className="status-muted">
-              <strong>{refreshResult.notFound}</strong> no pair found
-            </span>
-            <span className="status-bad">
-              <strong>{refreshResult.failed}</strong> failed
-            </span>
-            <span className="status-muted">provider: {refreshResult.provider}</span>
-          </div>
-        )}
-      </section>
-
-      <section className="panel" aria-labelledby="tokens-backfill">
-        <h2 id="tokens-backfill">Collect historical candles</h2>
-        <p className="panel-sub">
-          Download historical price candles for a token's current market pair, then later measure
-          what happened after each tracked-wallet buy. Uses the tokens selected above (max{' '}
-          <strong>{MAX_BACKFILL}</strong>; start with 1–2). This is historical evidence only — not a
-          prediction.
-        </p>
-        {backfillError && (
-          <p className="notice danger" role="alert">
-            {backfillError}
-          </p>
-        )}
-        <div className="toolbar" role="group" aria-label="Historical backfill controls">
-          <label className="field">
-            Interval
-            <select
-              value={interval}
-              onChange={(e) => setInterval(e.target.value as (typeof INTERVALS)[number])}
-            >
-              {INTERVALS.map((iv) => (
-                <option key={iv} value={iv}>
-                  {iv}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            Start (UTC)
-            <input
-              type="datetime-local"
-              value={range.start}
-              onChange={(e) => setRange((r) => ({ ...r, start: e.target.value }))}
-            />
-          </label>
-          <label className="field">
-            End (UTC)
-            <input
-              type="datetime-local"
-              value={range.end}
-              onChange={(e) => setRange((r) => ({ ...r, end: e.target.value }))}
-            />
-          </label>
-          <button
-            className="btn"
-            style={{ alignSelf: 'flex-end' }}
-            onClick={() => void backfillSelected()}
-            disabled={selected.size === 0 || selected.size > MAX_BACKFILL || backfilling}
-            aria-busy={backfilling}
-          >
-            {backfilling ? 'Collecting…' : `Backfill ${selected.size || ''} selected`}
-          </button>
-        </div>
-        {selected.size > MAX_BACKFILL && (
-          <p className="panel-sub status-warn" role="status">
-            Select at most {MAX_BACKFILL} tokens to backfill candles.
-          </p>
-        )}
-        {backfillResult && (
-          <div className="import-summary" role="status">
-            <span className="status-good">
-              <strong>{backfillResult.complete}</strong> complete
-            </span>
-            <span className="status-warn">
-              <strong>{backfillResult.partial}</strong> partial
-            </span>
-            <span className="status-muted">
-              <strong>{backfillResult.notFound}</strong> no pair/candles
-            </span>
-            <span className="status-bad">
-              <strong>{backfillResult.failed}</strong> failed
-            </span>
-            <span className="status-muted">
-              <strong>{backfillResult.candlesInserted}</strong> candles added
-            </span>
-            <span className="status-muted">
-              <strong>{backfillResult.gapCount}</strong> gaps
-            </span>
-          </div>
-        )}
-      </section>
-
-      <section className="panel" aria-labelledby="tokens-table">
-        <div className="toolbar" style={{ justifyContent: 'space-between' }}>
-          <h2 id="tokens-table">Discovered tokens {data ? `(${data.total.toLocaleString()})` : ''}</h2>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={showDev}
-              onChange={(e) => {
-                setShowDev(e.target.checked);
-                setSelected(new Set());
-              }}
-            />
-            Show development records
-          </label>
-        </div>
-
-        {mode === 'simple' ? (
-          <SimpleTokenList
-            tokens={data?.items ?? null}
-            selected={selected}
-            atLimit={atLimit}
-            onToggle={toggle}
-          />
-        ) : (
-          <QuantTokenTable
-            tokens={data?.items ?? null}
-            selected={selected}
-            atLimit={atLimit}
-            onToggle={toggle}
-          />
-        )}
-      </section>
     </div>
   );
 }

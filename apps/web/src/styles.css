@@ -542,3 +542,11 @@ details.descriptor .market-grid { margin-top: 8px; }
 .prepare-stage-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
 .prepare-stage-reason { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
 @media (max-width: 640px) { .prepare-stage-row { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- Simple Mode: Home / Advanced action cards ---------- */
+.action-cards { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.action-card { display: flex; flex-direction: column; gap: 8px; padding: 20px; }
+.action-card h3 { font-size: 17px; }
+.action-card p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.action-card .btn, .action-card .btn.secondary { align-self: flex-start; margin-top: 4px; }
+@media (max-width: 640px) { .action-cards { grid-template-columns: minmax(0, 1fr); } }
