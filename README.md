@@ -401,6 +401,48 @@ comparison using the local 2.2 SOL reference bankroll. Migration:
 `20260712180143_wallet_quality_metrics`; models: `WalletQualityAnalysisRun`,
 `WalletQualityMetricSet`, `WalletCategoryMetric`, `WalletTimeWindowMetric`.
 
+## BN Main wallet readiness audit (read-only)
+
+Several tracked wallets share label patterns that begin with or contain
+`bn` (e.g. `bn`, `bn trezor`, `bn new`, `bn multi`, `cabal bn`). **BN Main is
+still unresolved.** It is one of the wallets labeled *exactly* `bn`, and it is
+explicitly **not** `bn trezor` (`HBYkoojFkFX7NWuF2VcpDWNXEdGatfNE6mYLsR2udSzo`).
+No wallet is ever auto-assigned a "BN Main" role, alias, or label — that
+requires explicit user confirmation of one exact public address, which has
+not happened yet.
+
+`npm run audit:bn-wallets` prints a read-only terminal report: every
+non-development wallet labeled exactly `bn` (kept strictly separate from
+case-insensitive-only variants like `BN`/`Bn` and from wallets whose label
+merely *contains* `bn`), each one's synchronization/reconstruction/quality/
+strategy-fingerprint readiness, and a plain comparison table. Every row's
+confirmation column always reads `Unconfirmed — user must verify exact
+address` — the script never infers or claims which candidate is BN Main, and
+never claims common ownership between similarly labeled wallets.
+
+The script is strictly read-only: it never synchronizes, reconstructs,
+analyzes, generates a fingerprint, or mutates any tracked-wallet record
+(label, group, enabled state, notes). Pass `--out <path>` to additionally
+write the full JSON report to a local path under `local-reports/` (gitignored
+— live wallet research is never committed).
+
+Implementation (`apps/api/src/services/walletResearch/`):
+
+- `currentness.ts` — the exact "is this record still current" rules
+  (reconstruction/quality/fingerprint), extracted from the one-click
+  preparation feature so both features share one definition instead of
+  reimplementing it.
+- `readinessReport.ts` — `buildWalletReadinessReports`, a generic per-wallet
+  factual report (sync state, stored event counts and date range,
+  reconstruction/quality/fingerprint state — `MISSING`/`RUNNING`/`FAILED`/
+  `STALE`/`CURRENT` — and their exact counts). Missing values are always
+  `null`, never coerced to `0`.
+- `bnAudit.ts` — `findBnLabeledWallets` (the strict exact/case-insensitive/
+  contains grouping), `toComparisonRow` and `narrativeFor` (the plain-language
+  "what is known / what is missing / what should happen next" sections).
+
+No migration was needed — this is a pure read layer over existing tables.
+
 ## Focus Trader Strategy Lab (Phase 2C-A)
 
 The **Focus Trader Lab** page studies how user-selected public wallets appear to

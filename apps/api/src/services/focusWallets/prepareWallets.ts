@@ -26,6 +26,12 @@ import {
   releaseStrategyLock,
   tryAcquireStrategyLock,
 } from '../walletStrategies/analyzeStrategies.js';
+import {
+  latestCompletedFingerprintForWallet,
+  latestCompletedQualityForWallet,
+  latestCompletedReconstructionForWallet,
+  reconstructionCoverage,
+} from '../walletResearch/currentness.js';
 
 export const MAX_FOCUS_PREPARE_WALLETS = 5;
 export const DEFAULT_SYNC_TRANSACTION_LIMIT = 500;
@@ -106,35 +112,6 @@ export interface PrepareDeps {
 const blankStage = <T extends { status: PrepareStageStatus; reason: string | null; error: string | null }>(
   extra: Omit<T, 'status' | 'reason' | 'error'>,
 ): T => ({ status: 'NOT_STARTED', reason: null, error: null, ...extra }) as T;
-
-async function latestCompletedReconstructionForWallet(prisma: PrismaClient, walletId: string) {
-  return prisma.walletBehaviorProfile.findFirst({
-    where: { trackedWalletId: walletId, reconstructionRun: { status: 'COMPLETED', completedAt: { not: null } } },
-    orderBy: [
-      { reconstructionRun: { completedAt: 'desc' } },
-      { reconstructionRun: { id: 'desc' } },
-      { calculatedAt: 'desc' },
-      { id: 'desc' },
-    ],
-  });
-}
-async function latestCompletedQualityForWallet(prisma: PrismaClient, walletId: string) {
-  return prisma.walletQualityMetricSet.findFirst({
-    where: { trackedWalletId: walletId, analysisRun: { status: 'COMPLETED', completedAt: { not: null } } },
-    orderBy: [
-      { analysisRun: { completedAt: 'desc' } },
-      { analysisRun: { id: 'desc' } },
-      { calculatedAt: 'desc' },
-      { id: 'desc' },
-    ],
-  });
-}
-async function latestCompletedFingerprintForWallet(prisma: PrismaClient, walletId: string) {
-  return prisma.walletStrategyFingerprint.findFirst({
-    where: { trackedWalletId: walletId, run: { status: 'COMPLETED', completedAt: { not: null } } },
-    orderBy: [{ run: { completedAt: 'desc' } }, { run: { id: 'desc' } }, { calculatedAt: 'desc' }, { id: 'desc' }],
-  });
-}
 
 async function prepareOneWallet(
   deps: PrepareDeps,
@@ -225,14 +202,7 @@ async function prepareOneWallet(
       reconstruction.reason = 'sync_failed';
     } else {
       const existing = await latestCompletedReconstructionForWallet(prisma, wallet.id);
-      let covered = 0;
-      if (existing) {
-        const agg = await prisma.walletPosition.aggregate({
-          where: { trackedWalletId: wallet.id, reconstructionRunId: existing.reconstructionRunId },
-          _sum: { includedEventCount: true, excludedEventCount: true },
-        });
-        covered = (agg._sum.includedEventCount ?? 0) + (agg._sum.excludedEventCount ?? 0);
-      }
+      const covered = existing ? await reconstructionCoverage(prisma, wallet.id, existing.reconstructionRunId) : 0;
       // Skip only when a completed run already accounts for every currently
       // stored event — i.e. it already represents the newest synchronized data.
       if (existing && !options.forceRefresh && covered === storedEventCountAfter) {

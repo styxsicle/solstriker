@@ -177,6 +177,26 @@ signing, and real trades.
 - Frontend-only: no backend calculation, financial value or database schema
   changed; no new migration.
 
+### ✅ BN Main wallet readiness audit (complete — data inspection checkpoint, not an intelligence phase)
+
+- `npm run audit:bn-wallets`: read-only terminal report over every
+  non-development wallet labeled exactly `bn`, strictly separated from
+  case-insensitive-only variants and from wallets whose label merely contains
+  `bn` (e.g. `bn trezor`, `cabal bn`).
+- Shared, read-only currentness rules (`services/walletResearch/currentness.ts`)
+  extracted from one-click preparation so both features agree on what "current"
+  means; preparation's own behavior and tests are unchanged.
+- Generic per-wallet readiness report (`readinessReport.ts`): sync state,
+  stored-event counts and date range, and `MISSING`/`RUNNING`/`FAILED`/
+  `STALE`/`CURRENT` states for reconstruction, quality and strategy
+  fingerprint — missing values are always `null`, never `0`.
+- **BN Main remains unresolved.** No wallet is ever auto-assigned that role;
+  every report row says `Unconfirmed — user must verify exact address`.
+  `bn trezor` is explicitly not BN Main.
+- No migration needed (pure read layer). No relationship, ownership or
+  coordination inference performed — this checkpoint only inspects existing
+  data before Phase 2C-B begins.
+
 ### ⏭ Phase 2C-B — Related-wallet funding relationships, shared-entry timing evidence, leader/follower sequencing, and non-accusatory relationship heuristics (next checkpoint)
 
 - Funding-transfer evidence between user-selected wallets, stated as observations

@@ -18,7 +18,8 @@
     "dev": "npm run build -w packages/shared && concurrently -k -n api,web -c blue,magenta \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
     "test": "npm run build -w packages/shared && npm run test --workspaces --if-present",
     "lint": "eslint .",
-    "build": "npm run build -w packages/shared && npm run build -w apps/api && npm run build -w apps/web"
+    "build": "npm run build -w packages/shared && npm run build -w apps/api && npm run build -w apps/web",
+    "audit:bn-wallets": "npm run build -w packages/shared && npm run audit:bn-wallets -w apps/api --"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

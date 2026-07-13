@@ -556,6 +556,61 @@ horizontally. Missing values show "unknown", never zero.
 evidence, leader/follower sequencing, and non-accusatory relationship
 heuristics.** Do not begin it implicitly.
 
+## BN Main wallet readiness audit implementation notes
+
+- Data-inspection checkpoint before Phase 2C-B, not an intelligence phase.
+  No relationship, ownership, funding, or coordination inference was added.
+- Live database as of this audit: **10** wallets labeled exactly `bn`
+  (case-sensitive, non-development), **0** case-insensitive-only variants
+  (no bare `BN`/`Bn`), **7** other labels containing `bn` (`bn trezor`,
+  `bn new`, `bn NEW`, `bn multi`, `bn tiktok wallet...`, `cabal bn`,
+  `trackabale BN`). All 10 exact-`bn` wallets share `group: "Main"`,
+  `source: "import:json"`, `enabled: true`, `notes: null`, and near-identical
+  `createdAt`/`updatedAt` timestamps (one bulk import) — the wallet record
+  itself gives no distinguishing signal; only their address and downstream
+  research state differ. `bn trezor` = `HBYkoojFkFX7NWuF2VcpDWNXEdGatfNE6mYLsR2udSzo`,
+  confirmed unchanged. The previously-observed candidate
+  `AECU4NWws6JnAmxzGPAgsrJ3cgJsbsWgXbqq9EjXtLgH` is confirmed still labeled
+  exactly `bn` and — as of the live dev server's own independent activity
+  during this session — now has real research (231 stored events, a CURRENT
+  reconstruction, 26-cycle strategy sample). It is still only a candidate:
+  BN Main remains unconfirmed by the user.
+- `services/walletResearch/currentness.ts` exports the exact rules previously
+  private to `services/focusWallets/prepareWallets.ts`
+  (`latestCompletedReconstructionForWallet`, `latestCompletedQualityForWallet`,
+  `latestCompletedFingerprintForWallet`, `reconstructionCoverage`,
+  `isReconstructionCurrent`, `isQualityCurrent`, `isFingerprintCurrent`).
+  `prepareWallets.ts` now imports from there instead of keeping private
+  duplicates — its own 17 tests were re-run unchanged and still pass,
+  confirming the extraction didn't alter preparation behavior.
+- `readinessReport.ts`'s `RecordState` (`MISSING`/`RUNNING`/`FAILED`/`STALE`/
+  `CURRENT`) is derived from TWO queries per record type: the latest
+  *completed* one (via the shared currentness helpers, for the CURRENT/STALE
+  distinction) and the latest record of *any* status touching that wallet
+  (to detect `RUNNING`/`FAILED` — a run whose own `status` field is still
+  `RUNNING`/`FAILED`/`PARTIAL` even though it already wrote a profile/metric-
+  set/fingerprint row for this wallet). A `RUNNING` state is only observable
+  via a raw concurrent DB read during an in-flight request — preparation and
+  quality/fingerprint analysis are synchronous within one HTTP request, so in
+  practice this state is rare, but the report handles it rather than
+  crashing or lying.
+- `apps/api/src/scripts/auditBnWallets.ts` (`npm run audit:bn-wallets`, or
+  `npm run audit:bn-wallets -w apps/api` directly) is intentionally a plain
+  script, not an HTTP route — there is no product reason to expose "find BN
+  Main" as an API endpoint, and a route would need its own auth/rate-limit
+  surface for no benefit. `--out <path>` optionally writes the full JSON
+  report; default path is `local-reports/bn-wallet-audit.json`, newly added
+  to `.gitignore` (live wallet research must never be committed).
+- Test fixture note: `test/strategies/fixtures.ts`'s `seedWallet` helper
+  *always* creates a `WalletSyncState` row, even with `withReconstruction:
+  false` — a genuinely never-synced wallet for a MISSING-state test must be
+  created directly via `prisma.trackedWallet.create`, not through
+  `seedWallet`.
+- Verification: shared 22, API 268 (249 + 19 new), frontend 132 = **422
+  tests**; lint and build pass. No migration. The script itself was run
+  read-only against the live dev database and confirmed to leave every
+  table count and `PRAGMA integrity_check` unchanged.
+
 ## Beginner UX Simplification Pass implementation notes
 
 - Frontend-only. No migration, no backend route, no financial calculation

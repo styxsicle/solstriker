@@ -44,6 +44,10 @@ wallet-exports/
 *wallet*export*.json
 *wallet*export*.csv
 
+# Generated local reports (e.g. npm run audit:bn-wallets --out ...) — live
+# database contents, never committed
+local-reports/
+
 # Generated files
 node_modules/
 dist/
