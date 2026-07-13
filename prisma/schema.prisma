@@ -57,6 +57,8 @@ model Token {
   candles         TokenMarketCandle[]
   entryOutcomes   WalletEntryOutcome[]
   walletPositions WalletPosition[]
+  paperCalls      PaperCall[]
+  paperPositions  PaperPosition[]
 
   @@index([stage])
 }
@@ -871,4 +873,135 @@ model WalletStrategyPatternMetric {
   @@index([fingerprintId, patternType, sortOrder])
   @@index([patternType])
   @@index([confidence])
+}
+
+// ---------------------------------------------------------------------------
+// FOMO Simulator V1 — paper calls only. No real trading, no wallet connection,
+// no signing, no automatic execution. Financial values are exact decimal
+// STRINGS (SQLite has no Decimal type); unknown values are NULL — never zero.
+// ---------------------------------------------------------------------------
+
+// One immutable recorded call event (BUY | HOLD | EXIT | AVOID | NO_TRADE).
+// Everything a call was based on is frozen here as a snapshot: later edits to
+// wallet labels, tokens, or Slow Cook results must never rewrite this record.
+// conviction: HIGH | MEDIUM | LOW (user-facing wording of Slow Cook confidence)
+model PaperCall {
+  id                         String   @id @default(cuid())
+  dedupeKey                  String   @unique
+  action                     String
+  conviction                 String
+  slowCookState              String
+  slowCookConfidence         String
+  slowCookMethodologyVersion String
+  fomoMethodologyVersion     String
+  analyzedAt                 DateTime
+  latestEvidenceAt           DateTime?
+  tokenId                    String
+  tokenMint                  String
+  tokenName                  String?
+  tokenSymbol                String?
+  cohortKey                  String // sorted wallet IDs joined — identity is addresses/IDs, never labels
+  walletIdsJson              String // sorted selected wallet IDs
+  walletAddressesJson        String
+  walletLabelsJson           String // display-only snapshot; label edits never rewrite history
+  styleSummariesJson         String?
+  reasonsJson                String // "why this appeared" lines, verbatim from the analysis
+  invalidationJson           String // invalidation conditions, verbatim
+  evidenceJson               String // separated evidence dimensions
+  dataQualityJson            String
+  settingsJson               String // exact Slow Cook settings used for the revalidation
+  entrySnapshotId            String?
+  entryObservedAt            DateTime?
+  entryPriceUsd              String?
+  marketCapUsd               String?
+  liquidityUsd               String?
+  volume24hUsd               String?
+  snapshotFreshness          String?
+  simulatedAmountUsd         String?
+  feeRatePct                 String?
+  entrySlippagePct           String?
+  exitSlippagePct            String?
+  priced                     Boolean  @default(false)
+  unpricedReason             String?
+  warningCodes               String   @default("[]")
+  paperPositionId            String?
+  createdAt                  DateTime @default(now())
+
+  token         Token          @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  paperPosition PaperPosition? @relation(fields: [paperPositionId], references: [id])
+
+  @@index([tokenId])
+  @@index([cohortKey])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// One simulated USD position (paper money only). status: OPEN | CLOSED
+model PaperPosition {
+  id                      String    @id @default(cuid())
+  tokenId                 String
+  tokenMint               String
+  tokenName               String?
+  tokenSymbol             String?
+  cohortKey               String
+  walletIdsJson           String
+  methodologyVersion      String
+  status                  String    @default("OPEN")
+  notionalUsd             String
+  feeRatePct              String
+  entrySlippagePct        String
+  exitSlippagePct         String
+  entrySnapshotId         String
+  entryObservedAt         DateTime
+  entryPriceUsd           String // raw stored price at entry
+  effectiveEntryPriceUsd  String // raw × (1 + entry slippage)
+  entryFeeUsd             String
+  tokenQuantity           String
+  entryWarningCodes       String    @default("[]")
+  openedAt                DateTime  @default(now())
+  closedAt                DateTime?
+  exitSnapshotId          String?
+  exitObservedAt          DateTime?
+  exitPriceUsd            String?
+  grossExitValueUsd       String?
+  exitFeeUsd              String?
+  netExitValueUsd         String?
+  realizedPlUsd           String?
+  realizedReturnPct       String?
+  latestValueUsd          String?
+  unrealizedPlUsd         String?
+  unrealizedReturnPct     String?
+  latestValuationAt       DateTime?
+  exitSignalPendingReason String? // EXIT recorded but no usable closing price yet
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  token      Token                    @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  calls      PaperCall[]
+  valuations PaperPositionValuation[]
+
+  @@index([status])
+  @@index([tokenId, cohortKey, methodologyVersion])
+  @@index([openedAt])
+}
+
+// One immutable valuation checkpoint from one stored market snapshot.
+// The (positionId, snapshotId) unique constraint makes refresh idempotent.
+model PaperPositionValuation {
+  id                  String   @id @default(cuid())
+  positionId          String
+  snapshotId          String
+  observedAt          DateTime
+  priceUsd            String
+  grossValueUsd       String // quantity × price × (1 − exit slippage)
+  netValueUsd         String // gross − exit fee
+  unrealizedPlUsd     String
+  unrealizedReturnPct String
+  freshness           String
+  createdAt           DateTime @default(now())
+
+  position PaperPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  @@unique([positionId, snapshotId])
+  @@index([positionId, observedAt])
 }

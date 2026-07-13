@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import {
   api,
+  type RecordPaperCallResponse,
   type SlowCookCandidate,
   type SlowCookResult,
   type SlowCookWalletStyleMemory,
@@ -21,12 +22,14 @@ import { useWalletSearch } from '../hooks/useWalletSearch';
 import { useMode } from '../lib/mode';
 import { shortAddr } from '../lib/format';
 import { slowCookConfidenceText, slowCookHeadline, slowCookStateText } from '../lib/slowCookWording';
+import { formatReturnPct, paperActionHeadline } from '../lib/fomoWording';
 import type { PageId } from '../components/Sidebar';
 
 const MAX_SLOW_COOK_WALLETS = 10;
 const DEFAULT_LOOKBACK_DAYS = '30';
 const DEFAULT_MINIMUM_WALLETS = '1';
 const DEFAULT_LIMIT = '20';
+const DEFAULT_SIMULATED_AMOUNT = '100';
 
 function StyleMemoryCard({ memory }: { memory: SlowCookWalletStyleMemory }) {
   return (
@@ -43,10 +46,54 @@ function StyleMemoryCard({ memory }: { memory: SlowCookWalletStyleMemory }) {
   );
 }
 
-function CandidateCard({ candidate }: { candidate: SlowCookCandidate }) {
+interface CandidateCardProps {
+  candidate: SlowCookCandidate;
+  walletIds: string[];
+  settings: { lookbackDays: number; minimumWallets: number; limit: number; includeLowerConfidence: boolean };
+}
+
+function CandidateCard({ candidate, walletIds, settings }: CandidateCardProps) {
   const [expanded, setExpanded] = useState(false);
   const { mode } = useMode();
   const headline = slowCookHeadline(candidate.state, candidate.confidence);
+  const preview = candidate.paperPreview;
+
+  const [amount, setAmount] = useState(DEFAULT_SIMULATED_AMOUNT);
+  const [recording, setRecording] = useState(false);
+  const [recordError, setRecordError] = useState<string | null>(null);
+  const [recordResult, setRecordResult] = useState<RecordPaperCallResponse | null>(null);
+
+  async function recordCall() {
+    if (recording) return;
+    setRecording(true);
+    setRecordError(null);
+    try {
+      const response = await api<RecordPaperCallResponse>('/api/fomo-simulator/calls', {
+        method: 'POST',
+        body: JSON.stringify({
+          tokenId: candidate.tokenId,
+          walletIds,
+          lookbackDays: settings.lookbackDays,
+          minimumWallets: settings.minimumWallets,
+          limit: settings.limit,
+          includeLowerConfidence: settings.includeLowerConfidence,
+          simulatedAmountUsd: amount,
+        }),
+      });
+      setRecordResult(response);
+    } catch (e) {
+      const message = (e as Error).message;
+      setRecordError(
+        message === 'duplicate_call'
+          ? 'This same underlying call was already recorded — no duplicate was created.'
+          : message === 'stale_analysis'
+            ? 'This token is no longer a current Slow Cook result. Run Slow Cook again.'
+            : 'Something went wrong while recording this paper call.',
+      );
+    } finally {
+      setRecording(false);
+    }
+  }
 
   return (
     <article className="card action-card" aria-label={candidate.name ?? candidate.mintAddress}>
@@ -56,6 +103,56 @@ function CandidateCard({ candidate }: { candidate: SlowCookCandidate }) {
       </h3>
       <p className="panel-sub">{slowCookStateText(candidate.state)}</p>
       <p className="panel-sub">{slowCookConfidenceText(candidate.confidence)}</p>
+
+      {preview && (
+        <div className="pattern-block">
+          <p>
+            Paper call preview:
+            <br />
+            <strong>{paperActionHeadline(preview.action, preview.conviction)}</strong>
+          </p>
+          {preview.openPositionId ? (
+            <>
+              <p className="status-muted">
+                Open paper trade: {formatReturnPct(preview.openPositionUnrealizedReturnPct)}
+              </p>
+              <p className="status-muted">
+                The next recorded call will be HOLD, EXIT, or NO TRADE depending on current Slow Cook evidence.
+              </p>
+            </>
+          ) : (
+            <label className="field">
+              Simulated amount (USD)
+              <input
+                aria-label="Simulated amount (USD)"
+                inputMode="decimal"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+              />
+            </label>
+          )}
+          {recordError && (
+            <p className="notice danger" role="alert">
+              {recordError}
+            </p>
+          )}
+          {recordResult && (
+            <p className="notice info" role="status">
+              Recorded: {recordResult.call.action}
+              {recordResult.call.priced === false && recordResult.call.unpricedReason
+                ? ` — ${recordResult.call.unpricedReason}`
+                : ''}
+            </p>
+          )}
+          <button className="btn secondary" disabled={recording} aria-busy={recording} onClick={() => void recordCall()}>
+            {recording
+              ? 'Recording…'
+              : preview.action === 'BUY' && !preview.openPositionId
+                ? `Simulate $${amount || '0'} trade`
+                : 'Record paper call'}
+          </button>
+        </div>
+      )}
 
       <div className="pattern-block">
         <h4>Why this appeared</h4>
@@ -369,7 +466,12 @@ export function SlowCookPage({ onNavigate }: { onNavigate: (page: PageId) => voi
           )}
 
           {result.candidates.map((candidate) => (
-            <CandidateCard candidate={candidate} key={candidate.tokenId} />
+            <CandidateCard
+              candidate={candidate}
+              walletIds={selected}
+              settings={result.options}
+              key={candidate.tokenId}
+            />
           ))}
 
           <div className="pattern-block">

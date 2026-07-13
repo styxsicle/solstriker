@@ -733,6 +733,157 @@ export interface SlowCookCandidate {
     observedAt: string | null;
     freshness: SlowCookMarketFreshness | null;
   } | null;
+  /** FOMO Simulator preview, derived by the backend — never by the frontend. */
+  paperPreview?: PaperCallPreview;
+}
+
+// --- FOMO Simulator V1 (paper calls only — no real trading) ---
+
+export type PaperAction = 'BUY' | 'HOLD' | 'EXIT' | 'AVOID' | 'NO_TRADE';
+export type PaperConviction = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface PaperCallPreview {
+  action: PaperAction;
+  conviction: PaperConviction;
+  openPositionId: string | null;
+  openPositionUnrealizedReturnPct: string | null;
+}
+
+export interface PaperCallRecord {
+  id: string;
+  action: PaperAction;
+  conviction: PaperConviction;
+  slowCookState: SlowCookCandidateState;
+  slowCookConfidence: SlowCookConfidenceLevel;
+  slowCookMethodologyVersion: string;
+  fomoMethodologyVersion: string;
+  analyzedAt: string;
+  latestEvidenceAt: string | null;
+  tokenId: string;
+  tokenMint: string;
+  tokenName: string | null;
+  tokenSymbol: string | null;
+  cohortKey: string;
+  walletIds: string[];
+  walletAddresses: (string | null)[];
+  walletLabels: (string | null)[];
+  styleSummaries: { walletId: string; evidenceState: string; summarySentences: string[] }[];
+  reasons: string[];
+  invalidation: string[];
+  evidence: Record<string, unknown> | null;
+  dataQuality: Record<string, unknown> | null;
+  settings: Record<string, unknown> | null;
+  entrySnapshotId: string | null;
+  entryObservedAt: string | null;
+  entryPriceUsd: string | null;
+  marketCapUsd: string | null;
+  liquidityUsd: string | null;
+  volume24hUsd: string | null;
+  snapshotFreshness: string | null;
+  simulatedAmountUsd: string | null;
+  feeRatePct: string | null;
+  entrySlippagePct: string | null;
+  exitSlippagePct: string | null;
+  priced: boolean;
+  unpricedReason: string | null;
+  warningCodes: string[];
+  paperPositionId: string | null;
+  dedupeKey: string;
+  createdAt: string;
+}
+
+export interface PaperPositionRecord {
+  id: string;
+  tokenId: string;
+  tokenMint: string;
+  tokenName: string | null;
+  tokenSymbol: string | null;
+  cohortKey: string;
+  walletIds: string[];
+  methodologyVersion: string;
+  status: 'OPEN' | 'CLOSED';
+  notionalUsd: string;
+  feeRatePct: string;
+  entrySlippagePct: string;
+  exitSlippagePct: string;
+  entrySnapshotId: string;
+  entryObservedAt: string;
+  entryPriceUsd: string;
+  effectiveEntryPriceUsd: string;
+  entryFeeUsd: string;
+  tokenQuantity: string;
+  entryWarningCodes: string[];
+  openedAt: string;
+  closedAt: string | null;
+  exitSnapshotId: string | null;
+  exitObservedAt: string | null;
+  exitPriceUsd: string | null;
+  grossExitValueUsd: string | null;
+  exitFeeUsd: string | null;
+  netExitValueUsd: string | null;
+  realizedPlUsd: string | null;
+  realizedReturnPct: string | null;
+  latestValueUsd: string | null;
+  unrealizedPlUsd: string | null;
+  unrealizedReturnPct: string | null;
+  latestValuationAt: string | null;
+  exitSignalPendingReason: string | null;
+}
+
+export interface PaperPositionValuationRecord {
+  id: string;
+  positionId: string;
+  snapshotId: string;
+  observedAt: string;
+  priceUsd: string;
+  grossValueUsd: string;
+  netValueUsd: string;
+  unrealizedPlUsd: string;
+  unrealizedReturnPct: string;
+  freshness: string;
+}
+
+export interface PaperPositionDetail extends PaperPositionRecord {
+  calls: PaperCallRecord[];
+  valuations: PaperPositionValuationRecord[];
+}
+
+export interface FomoSummary {
+  methodologyVersion: string;
+  netPlUsd: string | null;
+  realizedPlUsd: string | null;
+  unrealizedPlUsd: string | null;
+  openTradeCount: number;
+  closedTradeCount: number;
+  winRatePct: string | null;
+  winningClosedCount: number | null;
+  highConvictionPlUsd: string | null;
+  highConvictionTradeCount: number;
+  calls: {
+    total: number;
+    buy: number;
+    hold: number;
+    exit: number;
+    avoid: number;
+    noTrade: number;
+    unpriced: number;
+  };
+}
+
+export interface RecordPaperCallRequest {
+  tokenId: string;
+  walletIds: string[];
+  lookbackDays?: number;
+  minimumWallets?: number;
+  limit?: number;
+  includeLowerConfidence?: boolean;
+  simulatedAmountUsd?: string;
+  assumptions?: { feeRatePct?: string; entrySlippagePct?: string; exitSlippagePct?: string };
+}
+
+export interface RecordPaperCallResponse {
+  call: PaperCallRecord;
+  position: PaperPositionRecord | null;
 }
 
 export interface SlowCookResult {

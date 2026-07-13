@@ -637,6 +637,112 @@ IDs, entry snapshot, entry price, reasons, invalidation conditions), but no
 paper calls exist yet. This phase needed **no new database migration** — it
 is entirely read-only against existing tables.
 
+## FOMO Simulator V1 (paper calls only)
+
+The **FOMO Simulator** records Solstriker's own Slow Cook calls as simulated
+**paper** trades (USD, no wallet connection) and shows exactly what they
+would have made or lost, using only already-stored market snapshots. It is
+strictly simulation: no real trading, no wallet connection, no private keys,
+no signing, no automatic execution, no copy-trading button, no portfolio
+management, no background monitoring, no ML training, and **no historical
+backtesting yet** — that remains a later, not-yet-built phase. Methodology
+version: `fomo-sim-v1`.
+
+**Call mapping is deterministic and backend-only** — the request schema has
+no `action` field, so a frontend-provided action is never trusted. Without an
+open paper position: `BUILDING`/`HOLDING` + `HIGHER` confidence → `BUY`;
+`BUILDING`/`HOLDING` + `MODERATE`/`LOW` → `NO_TRADE`; `COOLING` or
+`DISTRIBUTION_RISK` → `AVOID`; `MIXED`/`INSUFFICIENT_EVIDENCE` → `NO_TRADE`.
+With an open paper position (same token + cohort + `fomo-sim-v1`
+methodology): `BUILDING`/`HOLDING` + `HIGHER`/`MODERATE` → `HOLD`;
+`BUILDING`/`HOLDING` + `LOW` → `NO_TRADE` (a low-confidence reading never
+forces an exit — the position is left unchanged); `COOLING`/
+`DISTRIBUTION_RISK` → `EXIT`; `MIXED`/`INSUFFICIENT_EVIDENCE` → `NO_TRADE`
+(position unchanged). Cohort identity is the sorted, deduplicated set of
+selected wallet IDs — never labels or selection order.
+
+Recording a call **always revalidates** the current Slow Cook analysis
+server-side against current stored data (it never trusts a frontend
+candidate payload); a token that is no longer a candidate under the same
+settings returns 409 `stale_analysis`. Each stored `PaperCall` freezes an
+**immutable evidence snapshot** — wallet IDs/addresses/labels as of that
+moment, reasons, invalidation conditions, evidence dimensions, data quality,
+settings, entry snapshot/price/market context — so editing a wallet label
+later never rewrites history. The dedupe key is a SHA-256 hash of real
+inputs (token, cohort, derived action, latest selected-wallet evidence
+timestamp, entry snapshot ID, methodology version) — never random or a bare
+timestamp; a repeated identical request returns 409 `duplicate_call` and
+creates nothing new.
+
+**Simulation math** (exact `Decimal.js` strings, precision 48,
+ROUND_HALF_UP — the project's existing `D()`/`exact()` pattern, never native
+floats): entry fee = notional × fee rate; quote available = notional − entry
+fee; effective entry price = raw price × (1 + entry slippage); token
+quantity = quote available ÷ effective entry price; gross exit value =
+quantity × raw exit price × (1 − exit slippage); exit fee = gross × fee
+rate; net exit value = gross − exit fee; simulated P/L = net exit value −
+original notional; return % = P/L ÷ notional × 100. Defaults: $100 notional,
+0.3% fee per side, 1% entry slippage, 1% exit slippage — all configurable
+per call within validated bounds (amount $1–$1,000,000; assumption
+percentages 0–25%).
+
+**Pricing** is built on the existing centralized freshness rules
+(`services/tokenMetrics/freshness.ts`): `FRESH` → priced; `AGING` → priced
+with a visible `AGING_SNAPSHOT` warning; `STALE`/`UNKNOWN`/`NEVER_FETCHED` →
+not priced. Future-dated observations are `UNKNOWN` and rejected (no
+look-ahead bias). A `BUY` without a usable price is recorded as unpriced
+(`priced: false`, `unpricedReason` set) and opens **no** position — it is
+never later back-filled with a future price. An `EXIT` without a usable
+price is recorded but the position stays `OPEN` with
+`exitSignalPendingReason` set — it is never silently closed at a future
+price. `POST /api/fomo-simulator/positions/:id/refresh` only ever reads the
+latest already-stored `TokenMarketSnapshot` (never calls a provider, never
+runs in the background) and is idempotent — a `(positionId, snapshotId)`
+unique constraint plus an `observedAt` comparison mean the same snapshot
+never creates a second valuation, and all prior valuation history is
+preserved.
+
+**Scorecard** (`GET /api/fomo-simulator/summary`): win rate uses **only**
+closed positions with realized P/L — `HOLD` events never count as separate
+wins, and `AVOID`/`NO_TRADE` calls and unpriced `BUY`s are never portfolio
+trades. Missing stats are `null` (the frontend shows "—" or "Not enough
+data", never a fake 0%); realized and unrealized P/L stay strictly
+separate, with "net" as their sum only when at least one exists. It also
+reports total/`BUY`/`HOLD`/`EXIT`/`AVOID`/`NO_TRADE`/unpriced call counts
+and a high-conviction-only P/L subtotal (positions whose opening `BUY` had
+`HIGH` conviction).
+
+Routes: `POST /api/fomo-simulator/calls`, `GET /api/fomo-simulator/calls`,
+`GET /api/fomo-simulator/positions`, `GET /api/fomo-simulator/positions/:id`,
+`POST /api/fomo-simulator/positions/:id/refresh`,
+`GET /api/fomo-simulator/summary`. The record-call route also rejects
+dev-seed wallets, unknown wallet/token IDs, and duplicate wallet IDs in the
+same request. `POST /api/slow-cook/analyze` additionally returns a
+`paperPreview` on every candidate (action, conviction, any existing open
+position ID and its unrealized return) computed with the exact same
+`fomo-sim-v1` mapping, so the frontend never re-derives it itself — Slow
+Cook candidate cards show "Paper call preview: `<ACTION>` — `<CONVICTION>`
+CONVICTION" plus either a "Simulate $100 trade" (configurable amount) button
+for a fresh BUY, or "Record paper call" and an "Open paper trade: `<return>`%"
+line when a position already exists.
+
+"FOMO Simulator" is in Simple Mode's nav directly after Slow Cook (Home,
+Wallets, Coin Check, Slow Cook, **FOMO Simulator**, Alerts, My Positions,
+Advanced), and in Quant Mode's nav and the Advanced directory. The page
+shows scorecard cards, an Open trades section (headline like
+"HOLD — HIGH CONVICTION" plus P/L and return, with collapsible Why? / What
+changes the call? / Call history / Simulation assumptions), a Closed trades
+section, and a "Calls without positions" section for AVOID/NO_TRADE/unpriced
+BUYs kept separate from P/L and win rate. Methodology version, exact IDs,
+cohort key, and raw fee/slippage/price/quantity figures stay collapsed in
+Simple Mode. A prominent notice reads: "Paper simulation only. No real trade
+was placed."
+
+Additive migration `add_fomo_paper_calls` introduces `PaperCall` (immutable
+call events), `PaperPosition` (open/closed simulated positions), and
+`PaperPositionValuation` (immutable valuation checkpoints, idempotent per
+snapshot). No existing wallet, token, or Slow Cook data was touched.
+
 ## Development seed data
 
 `POST /api/dev/seed` (or the "Seed development data" button on the Tokens page)

@@ -14,6 +14,7 @@ export type PageId =
   | 'wallets'
   | 'tokens'
   | 'slow-cook'
+  | 'fomo-simulator'
   | 'learn-wallet'
   | 'advanced'
   | 'overview'
@@ -36,6 +37,7 @@ export const SIMPLE_NAV: NavItem[] = [
   { id: 'wallets', label: 'Wallets', icon: '◈' },
   { id: 'tokens', label: 'Coin Check', icon: '❖' },
   { id: 'slow-cook', label: 'Slow Cook', icon: '🐢' },
+  { id: 'fomo-simulator', label: 'FOMO Simulator', icon: '📈' },
   { id: 'alerts' as PageId, label: 'Alerts', icon: '🔔', disabled: true },
   { id: 'my-positions' as PageId, label: 'My Positions', icon: '◫', disabled: true },
   { id: 'advanced', label: 'Advanced', icon: '⚙' },
@@ -50,6 +52,7 @@ export const QUANT_NAV: NavItem[] = [
   { id: 'intelligence', label: 'Wallet Intelligence', icon: '⌁' },
   { id: 'focus', label: 'Focus Trader Lab', icon: '◉' },
   { id: 'slow-cook', label: 'Slow Cook', icon: '🐢' },
+  { id: 'fomo-simulator', label: 'FOMO Simulator', icon: '📈' },
   { id: 'help', label: 'Help', icon: '✚' },
 ];
 

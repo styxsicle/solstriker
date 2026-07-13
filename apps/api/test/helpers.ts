@@ -70,6 +70,11 @@ export async function buildTestApp(
 }
 
 export async function resetDb(prisma: PrismaClient) {
+  // FOMO Simulator paper rows first: valuations depend on positions, and
+  // calls/positions reference Token.
+  await prisma.paperPositionValuation.deleteMany();
+  await prisma.paperCall.deleteMany();
+  await prisma.paperPosition.deleteMany();
   // Phase 2C-A rows first: cohort members and fingerprints reference TrackedWallet
   // WITHOUT a cascade on purpose — deleting a cohort must never delete a wallet.
   await prisma.walletStrategyPatternMetric.deleteMany();

@@ -37,6 +37,11 @@ const LINKS: AdvancedLink[] = [
     description: 'Patient, high-conviction setups from selected wallets — evidence-backed research, never a trading signal.',
   },
   {
+    page: 'fomo-simulator',
+    title: 'FOMO Simulator',
+    description: 'Test Solstriker’s Slow Cook calls with paper money and see exactly what would have happened. No real trades.',
+  },
+  {
     page: 'overview',
     title: 'Overview',
     description: 'Technical system status — application, database, Solana connection and every research-database count.',

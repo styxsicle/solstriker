@@ -1,10 +1,13 @@
 # HANDOFF
 
 Continuation notes for any coding model/agent picking up this project.
-**Current state: Phase 2B complete** (1A foundation, 1B activity ingestion,
-1C reliable swap decoding, 1D-A beginner-friendly UI shell, 1D-B1 current token
-market snapshots, 1D-B2 historical OHLCV and entry outcomes). Do not start
-Phase 2C until the user asks.
+**Current state: FOMO Simulator V1 complete** (1A foundation, 1B activity
+ingestion, 1C reliable swap decoding, 1D-A beginner-friendly UI shell, 1D-B1
+current token market snapshots, 1D-B2 historical OHLCV and entry outcomes,
+2A wallet reconstruction, 2B wallet quality evidence, 2C-A Focus Trader
+Strategy Lab, the BN Main readiness audit, the Beginner UX Simplification
+Pass, Slow Cook V1, and FOMO Simulator V1). Do not start Phase 2C-B until
+the user asks.
 
 ## What this project is
 
@@ -168,8 +171,31 @@ Phase 2C-A additions (all additive):
   factual pattern rows (unique `(fingerprintId, patternType, patternValue)`).
   Values are exact decimal strings; unknown stays null.
 
+FOMO Simulator V1 additions (all additive):
+
+- `PaperCall`: one immutable recorded call event (`action`:
+  `BUY|HOLD|EXIT|AVOID|NO_TRADE`, `conviction`: `HIGH|MEDIUM|LOW`), unique
+  `dedupeKey`, the frozen Slow Cook state/confidence/methodology versions,
+  `cohortKey` plus JSON snapshots of wallet IDs/addresses/labels/style
+  summaries/reasons/invalidation/evidence/data-quality/settings, entry
+  snapshot/price/market context, simulation assumptions, `priced` +
+  `unpricedReason`, optional `paperPositionId`. Cascades from `Token`.
+- `PaperPosition`: one simulated USD position (`status`: `OPEN|CLOSED`),
+  entry fields (snapshot, observed time, raw + effective price, fee, token
+  quantity), exit fields (snapshot, price, gross/net value, fee, realized
+  P/L + return, all nullable until closed), latest valuation fields
+  (`latestValueUsd`, `unrealizedPlUsd`, `unrealizedReturnPct`,
+  `latestValuationAt`), and `exitSignalPendingReason` for an EXIT recorded
+  without a usable closing price. Indexed on `status` and on
+  `[tokenId, cohortKey, methodologyVersion]` for open-position lookups.
+- `PaperPositionValuation`: one immutable valuation checkpoint from one
+  stored market snapshot (price, gross/net value, unrealized P/L + return,
+  freshness). Unique `[positionId, snapshotId]` makes refresh idempotent;
+  cascades from `PaperPosition`.
+
 Migrations: `20260711012659_init`, `20260711031157_wallet_activity`,
-`..._reliable_swap_decoding`, `20260712205856_focus_trader_strategy_lab`
+`..._reliable_swap_decoding`, `20260712205856_focus_trader_strategy_lab`,
+`20260713054018_add_fomo_paper_calls`
 (additive only — no data was reset).
 
 ## API routes
@@ -201,7 +227,13 @@ Migrations: `20260711012659_init`, `20260711031157_wallet_activity`,
 | `GET /api/wallet-strategies/:walletId/patterns` | Same, filterable by `patternType` |
 | `GET /api/wallet-strategy-runs/:id` | Historical audit run detail |
 | `POST /api/focus-wallets/prepare` | Body `{ walletIds: string[] (1–5), syncTransactionLimit? (default 500), continueHistoricalSync?, forceRefresh? }`. User-triggered only. Orchestrates `syncWallet` → `reconstructWallets` → `analyzeWallets` → `analyzeStrategies` sequentially per wallet, reusing each service function directly (no HTTP self-calls, no duplicated math, no new migration). Per-stage skip-when-current logic; later stages `NOT_STARTED` when an earlier required stage failed; per-wallet in-process lock (409 `wallet_prepare_in_progress`); per-wallet failure isolation (a defense-in-depth catch in the batch loop guarantees one wallet's failure can never abort the others) |
-| `POST /api/slow-cook/analyze` | Body `{ walletIds: string[] (1–10), lookbackDays? (default 30), minimumWallets? (default 1), limit? (default 20), includeLowerConfidence? (default false) }`. Read-only and strictly scoped to the requested wallet IDs — never syncs, reconstructs, analyzes, fingerprints, or calls a provider. 400 `validation_error` / `duplicate_selection` / `unknown_wallet` / `dev_wallet_excluded`; sanitized 500 `slow_cook_analysis_failed`. Returns Wallet Style Memory per wallet plus deterministic candidates, all stamped `calculationVersion: "slow-cook-v1"` |
+| `POST /api/slow-cook/analyze` | Body `{ walletIds: string[] (1–10), lookbackDays? (default 30), minimumWallets? (default 1), limit? (default 20), includeLowerConfidence? (default false) }`. Read-only and strictly scoped to the requested wallet IDs — never syncs, reconstructs, analyzes, fingerprints, or calls a provider. 400 `validation_error` / `duplicate_selection` / `unknown_wallet` / `dev_wallet_excluded`; sanitized 500 `slow_cook_analysis_failed`. Returns Wallet Style Memory per wallet plus deterministic candidates, all stamped `calculationVersion: "slow-cook-v1"`, each with a `paperPreview` (action, conviction, open position ID + unrealized return) from the FOMO Simulator mapping |
+| `POST /api/fomo-simulator/calls` | Body `{ tokenId, walletIds: string[] (1–10), lookbackDays?, minimumWallets?, limit?, includeLowerConfidence?, simulatedAmountUsd? ($1–$1,000,000, default 100), assumptions? { feeRatePct?, entrySlippagePct?, exitSlippagePct? } (0–25%) }`. No `action` field — the action is always backend-derived. Revalidates Slow Cook server-side against current data. 400 `validation_error` / `duplicate_selection` / `unknown_wallet` / `dev_wallet_excluded` / `unknown_token`; 409 `duplicate_call` (with `paperCallId`) / `stale_analysis`; sanitized 500 `paper_call_failed` |
+| `GET /api/fomo-simulator/calls` | All recorded calls, newest first, with the frozen evidence snapshot parsed out |
+| `GET /api/fomo-simulator/positions` | All paper positions, newest-opened first |
+| `GET /api/fomo-simulator/positions/:id` | One position with its full call history and valuation history (404 `position_not_found`) |
+| `POST /api/fomo-simulator/positions/:id/refresh` | Reads only the latest already-stored `TokenMarketSnapshot`; idempotent per snapshot. Returns `valuationCreated` and a plain-language `skippedReason` when nothing new was applied (404 `position_not_found`, sanitized 500 `refresh_failed`) |
+| `GET /api/fomo-simulator/summary` | Scorecard: net/realized/unrealized P/L, open/closed trade counts, win rate (`null` until a priced trade closes), high-conviction P/L subtotal, per-action call counts |
 
 There is deliberately **no** ranking, leaderboard, top-wallet, best-wallet or
 ownership-inference endpoint, and none may be added.
@@ -556,6 +588,144 @@ horizontally. Missing values show "unknown", never zero.
 **Phase 2C-B — Related-wallet funding relationships, shared-entry timing
 evidence, leader/follower sequencing, and non-accusatory relationship
 heuristics.** Do not begin it implicitly.
+
+## FOMO Simulator V1 implementation notes
+
+- Paper-calls-only checkpoint layered directly on Slow Cook V1. It never
+  connects a wallet, signs anything, executes a real trade, offers a
+  copy-trading button, manages a portfolio, monitors in the background, or
+  trains an ML model. **Historical backtesting is explicitly a later,
+  not-yet-built phase** — the scorecard covers only calls this feature has
+  itself recorded going forward, never a retroactive replay of history.
+- Migration `20260713054018_add_fomo_paper_calls` (additive; zero DROP or
+  DELETE statements). Models: `PaperCall`, `PaperPosition`,
+  `PaperPositionValuation`.
+- **The action is derived on the backend only.** `services/fomoSimulator/mapping.ts`'s
+  `derivePaperAction(state, confidence, hasOpenPosition)` is a fixed lookup —
+  no scoring, no randomness. The request schema
+  (`routes/fomoSimulator.ts`'s `recordCallSchema`) simply has no `action`
+  field, so there is nothing for a compromised or buggy frontend to inject;
+  a dedicated test (`calls.test.ts`, "ignores a frontend-provided fake
+  action entirely") posts an extra `action` field in the body and confirms
+  it is silently ignored.
+- **Recording a call always revalidates Slow Cook server-side.**
+  `services/fomoSimulator/recordCall.ts`'s `recordPaperCall` calls
+  `analyzeSlowCook` internally with the exact requested wallet IDs and
+  settings, then looks up the candidate for the requested token in that
+  fresh result — it never trusts a frontend-supplied candidate object. If
+  the token no longer appears (evidence moved on since the user last saw
+  it), the request is rejected as 409 `stale_analysis` rather than acting on
+  stale evidence.
+- **Cohort identity is sorted, deduplicated wallet IDs** (`cohortKeyFor`),
+  never labels or selection order — the same underlying wallet set always
+  produces the same cohort key and therefore the same open-position lookup,
+  regardless of how the user re-orders their selection.
+- **Dedupe key is a SHA-256 hash of real inputs** (`dedupeKeyFor`): token ID,
+  cohort key, derived action, latest selected-wallet evidence timestamp,
+  entry snapshot ID, methodology version — never a random value or a bare
+  timestamp. A byte-identical repeated request (same evidence, same
+  snapshot) collides on the unique `dedupeKey` column and returns 409
+  `duplicate_call` with the existing call's ID; nothing new is created.
+- **Every `PaperCall` freezes an immutable evidence snapshot**
+  (`frozenEvidence()` in `recordCall.ts`): wallet IDs/addresses/labels as of
+  that moment, each wallet's style-memory summary, the candidate's
+  `whyThisAppeared`/`whatCouldInvalidate` reasons, its evidence dimensions,
+  data quality, and the exact Slow Cook settings used for the revalidation.
+  A dedicated test edits a wallet's label after recording a call and
+  confirms the stored `walletLabelsJson` on the existing `PaperCall` is
+  untouched — only a *new* call would pick up the new label.
+- **Position lifecycle** is enforced entirely inside `recordPaperCall`: BUY
+  opens exactly one `PaperPosition` (an open position for the same token +
+  cohort + `fomo-sim-v1` methodology is looked up first via
+  `findOpenPosition`, so a second BUY is structurally impossible while one
+  is open); HOLD appends a call and calls `refreshPositionValuation` but
+  never opens a second position; EXIT appends a call and closes the position
+  with realized P/L in the same transaction; AVOID/NO_TRADE only ever create
+  a call row (optionally linked to an existing open position for call
+  history) and never touch a position's P/L.
+- **Pricing eligibility** (`services/fomoSimulator/pricing.ts`) is built on
+  the existing centralized freshness rules
+  (`services/tokenMetrics/freshness.ts`), not a new set of thresholds:
+  `FRESH` → priced, `AGING` → priced with a visible `AGING_SNAPSHOT` warning
+  code, `STALE`/`UNKNOWN`/`NEVER_FETCHED` → not priced. `freshnessOf()`
+  already treats a future-dated `observedAt` as `UNKNOWN`, which this reuses
+  directly — no separate future-date check was needed, and a test pins a
+  future-dated snapshot being rejected. An unpriced BUY is recorded
+  (`priced: false`, `unpricedReason: UNPRICED_BUY_REASON`) and opens no
+  position — it is never revisited and back-filled with a later price. An
+  unpriced EXIT is recorded (`unpricedReason: EXIT_PENDING_REASON`) and the
+  position's `exitSignalPendingReason` is set while `status` stays `OPEN` —
+  a later refresh or EXIT call is required to actually close it; it is
+  never silently closed at a future price.
+- **Simulation math** (`services/fomoSimulator/math.ts`) reuses the
+  project's existing `D()`/`exact()` `decimal.js` helpers from
+  `services/walletPositions/math.ts` (precision 48, ROUND_HALF_UP) rather
+  than introducing a second decimal configuration. `computeEntry`,
+  `computeExitValue` (also reused by `refresh.ts` for unrealized
+  valuations — "what would this be worth if exited now?"), and `computePl`
+  are pure functions with no I/O. A manual zero-cost check (0% fee, 0%
+  slippage, $100 at $0.001 entry / $0.002 exit) was used to confirm the
+  formulas by hand: exactly 100,000 tokens opened, exactly $100 realized
+  P/L, exactly 100% return.
+- **Refresh is idempotent per snapshot.** `refreshPositionValuation` compares
+  the latest stored snapshot's `observedAt` against the position's most
+  recent `PaperPositionValuation.observedAt`; an equal-or-older snapshot is
+  a no-op with a plain-language `skippedReason`, and the
+  `[positionId, snapshotId]` unique constraint is a second line of defense
+  against a duplicate row. Prior valuation rows are never updated or
+  deleted — `GET /api/fomo-simulator/positions/:id` returns the full
+  ordered history.
+- **Scorecard denominators are deliberately narrow**
+  (`services/fomoSimulator/summary.ts`): win rate divides winning closed
+  positions by closed positions that actually have a `realizedPlUsd` (a
+  closed-but-never-priced position, which cannot currently occur since EXIT
+  only closes on a priced snapshot, is still excluded defensively). HOLD
+  events never create or count as a separate "trade" — they only refresh an
+  existing position's valuation. AVOID/NO_TRADE calls and unpriced BUYs
+  never appear in `openTradeCount`/`closedTradeCount` because they never
+  created a `PaperPosition` row at all. High-conviction P/L looks up
+  positions whose *opening* BUY call had `conviction: 'HIGH'` (joined via
+  `paperPositionId`), not the position's current/latest call — a position
+  that later gets a MEDIUM-conviction HOLD stays counted under its original
+  HIGH-conviction open.
+- Frontend: `#/fomo-simulator` sits in `SIMPLE_NAV` directly after `slow
+  cook` and in `QUANT_NAV`, plus an `AdvancedPage.tsx` directory entry
+  (`apps/web/src/components/Sidebar.tsx`). `lib/fomoWording.ts` is
+  display-only formatting (`paperActionHeadline`, `formatPlUsd`,
+  `formatReturnPct`, `plClass`) — it never derives an action itself, only
+  formats what the backend already decided. `SlowCookPage.tsx`'s candidate
+  cards read `candidate.paperPreview` (added server-side in
+  `routes/slowCook.ts`) to show "Paper call preview: `<ACTION>` —
+  `<CONVICTION>` CONVICTION" and either a configurable-amount "Simulate
+  trade" button (fresh BUY) or "Record paper call" plus an "Open paper
+  trade: `<return>`%" line (existing open position), and posts straight to
+  `POST /api/fomo-simulator/calls` with the same wallet/setting values used
+  for the Slow Cook query — the frontend never assembles or re-derives the
+  action.
+- Verification: shared 22, API 352 (297 + 55 new — 20 pure mapping/math
+  unit tests in `test/fomoSimulator/mapping.test.ts`, 35 integration tests
+  in `test/fomoSimulator/calls.test.ts`), frontend 180 (154 + 26 new — 21 in
+  `test/fomoSimulator.test.tsx`, 5 new in a "FOMO Simulator paper-call
+  integration" describe block in `test/slowCook.test.tsx`) = **554 tests**;
+  lint and build pass.
+- Manual verification: a **temporary copy** of `prisma/dev.db` (never the
+  live database) was used to run a full BUY → HOLD → EXIT → AVOID →
+  NO_TRADE → dedupe-retry sequence through the actual compiled service
+  functions (`recordPaperCall`, `refreshPositionValuation`,
+  `buildFomoSummary`). Confirmed exact math (a zero-cost $100 BUY at $0.001
+  opened exactly 100,000 tokens; the matching EXIT at $0.002 produced an
+  exact $100 realized P/L and 100% return), confirmed HOLD never duplicates
+  a position, confirmed refresh idempotency, confirmed the dedupe key blocks
+  an identical repeated call, and confirmed the scorecard aggregates
+  correctly. The temporary database was deleted afterward. Row counts for
+  `TrackedWallet`, `WalletEvent`, `WalletSyncState`,
+  `WalletPositionReconstructionRun`, `WalletQualityAnalysisRun`,
+  `WalletStrategyFingerprintRun`, `Token`, and `TokenMarketSnapshot` in the
+  real `prisma/dev.db` were identical before and after this entire phase
+  (including after the schema migration itself), and the new
+  `PaperCall`/`PaperPosition`/`PaperPositionValuation` tables in the real
+  database remain empty (0 rows) — no fake paper-call data was ever written
+  to the live database. `PRAGMA integrity_check` returned `ok`.
 
 ## Slow Cook V1 implementation notes
 

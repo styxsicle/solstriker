@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ModeProvider } from '../src/lib/mode';
 import { SlowCookPage } from '../src/pages/SlowCookPage';
 import { makeSlowCookCandidate, makeSlowCookResult, makeSlowCookStyleMemory } from './fixtures';
+import type { PaperCallPreview } from '../src/api';
 
 const WALLETS = [
   { id: 'wallet-1', address: 'FAKEwa11etAddressForTests11111111111111111', label: 'bn trezor', group: null, groups: [], emoji: null, notes: null, enabled: true, source: 'activity', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
@@ -12,7 +13,14 @@ const WALLETS = [
 
 const posted: { url: string; body: any }[] = [];
 
-function stub(options: { analyze?: unknown; analyzeStatus?: number } = {}) {
+function stub(
+  options: {
+    analyze?: unknown;
+    analyzeStatus?: number;
+    recordCall?: unknown;
+    recordCallStatus?: number;
+  } = {},
+) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -31,6 +39,18 @@ function stub(options: { analyze?: unknown; analyzeStatus?: number } = {}) {
       if (url.includes('/api/slow-cook/analyze')) {
         const status = options.analyzeStatus ?? 200;
         const body = options.analyze ?? (status !== 200 ? { error: 'slow_cook_analysis_failed' } : makeSlowCookResult());
+        return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.includes('/api/fomo-simulator/calls')) {
+        const status = options.recordCallStatus ?? 200;
+        const body =
+          options.recordCall ??
+          (status !== 200
+            ? { error: 'stale_analysis' }
+            : {
+                call: { id: 'call-1', action: 'BUY', priced: true, unpricedReason: null },
+                position: { id: 'position-1', status: 'OPEN' },
+              });
         return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
       }
       return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -318,5 +338,87 @@ describe('Slow Cook — Quant Mode', () => {
     await waitFor(() => expect(screen.getByText(/HIGH-CONVICTION HOLD/)).toBeTruthy());
     expect(screen.queryByText('slow-cook-v1')).toBeNull();
     expect(screen.queryByText('Confidence score')).toBeNull();
+  });
+});
+
+describe('Slow Cook — FOMO Simulator paper-call integration', () => {
+  const previewOf = (overrides: Partial<PaperCallPreview> = {}): PaperCallPreview => ({
+    action: 'BUY',
+    conviction: 'HIGH',
+    openPositionId: null,
+    openPositionUnrealizedReturnPct: null,
+    ...overrides,
+  });
+
+  it('shows a Paper call preview derived from the backend, with a record button', async () => {
+    stub({ analyze: makeSlowCookResult({ candidates: [makeSlowCookCandidate({ paperPreview: previewOf() })] }) });
+    view();
+    await selectWallet('bn trezor');
+    fireEvent.click(screen.getByRole('button', { name: 'Find slow-cook setups' }));
+    await waitFor(() => expect(screen.getByText('Paper call preview:')).toBeTruthy());
+    expect(screen.getByText(/BUY — HIGH CONVICTION/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Simulate \$100 trade/ })).toBeTruthy();
+  });
+
+  it('shows "Open paper trade" and a HOLD/EXIT/NO TRADE hint when a position already exists', async () => {
+    stub({
+      analyze: makeSlowCookResult({
+        candidates: [
+          makeSlowCookCandidate({
+            paperPreview: previewOf({ action: 'HOLD', openPositionId: 'position-1', openPositionUnrealizedReturnPct: '18.4' }),
+          }),
+        ],
+      }),
+    });
+    view();
+    await selectWallet('bn trezor');
+    fireEvent.click(screen.getByRole('button', { name: 'Find slow-cook setups' }));
+    await waitFor(() => expect(screen.getByText(/Open paper trade: \+18\.4%/)).toBeTruthy());
+    expect(
+      screen.getByText('The next recorded call will be HOLD, EXIT, or NO TRADE depending on current Slow Cook evidence.'),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Record paper call' })).toBeTruthy();
+  });
+
+  it('only sends the explicitly selected wallet IDs when recording a paper call', async () => {
+    stub({ analyze: makeSlowCookResult({ candidates: [makeSlowCookCandidate({ paperPreview: previewOf() })] }) });
+    view();
+    await selectWallet('bn trezor');
+    fireEvent.click(screen.getByRole('button', { name: 'Find slow-cook setups' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Simulate \$100 trade/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /Simulate \$100 trade/ }));
+    await waitFor(() => expect(posted.some((p) => p.url.includes('/api/fomo-simulator/calls'))).toBe(true));
+    const call = posted.find((p) => p.url.includes('/api/fomo-simulator/calls'))!;
+    expect(call.body.walletIds).toEqual(['wallet-1']);
+    expect(call.body.tokenId).toBe(makeSlowCookCandidate().tokenId);
+  });
+
+  it('handles a duplicate-call response without creating a duplicate or crashing', async () => {
+    stub({
+      analyze: makeSlowCookResult({ candidates: [makeSlowCookCandidate({ paperPreview: previewOf() })] }),
+      recordCallStatus: 409,
+      recordCall: { error: 'duplicate_call', paperCallId: 'call-1' },
+    });
+    view();
+    await selectWallet('bn trezor');
+    fireEvent.click(screen.getByRole('button', { name: 'Find slow-cook setups' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Simulate \$100 trade/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /Simulate \$100 trade/ }));
+    await waitFor(() =>
+      expect(
+        screen.getByText('This same underlying call was already recorded — no duplicate was created.'),
+      ).toBeTruthy(),
+    );
+  });
+
+  it('never shows a real buy/sell button or a wallet-connect control anywhere on the page', async () => {
+    stub({ analyze: makeSlowCookResult({ candidates: [makeSlowCookCandidate({ paperPreview: previewOf() })] }) });
+    view();
+    await selectWallet('bn trezor');
+    fireEvent.click(screen.getByRole('button', { name: 'Find slow-cook setups' }));
+    await waitFor(() => expect(screen.getByText('Paper call preview:')).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /^Buy$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Sell$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /connect wallet/i })).toBeNull();
   });
 });
