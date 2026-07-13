@@ -585,6 +585,58 @@ per wallet with readable labels (Already current, Synchronized, Reconstructed,
 Insufficient history, Failed — retry available); a failed wallet gets a "Retry
 this wallet" action. Selected wallets persist across search-query changes.
 
+## Slow Cook V1 (patient, high-conviction research)
+
+The **Slow Cook** page finds "patient, high-conviction" trading setups from
+real stored activity, scoped **strictly** to wallets the user explicitly
+selects — no other tracked wallet's activity is ever used. It is decision
+support, never a trading system: it never connects a wallet, signs anything,
+buys, sells, or claims a guaranteed outcome, and it makes no provider calls
+and triggers no synchronization, reconstruction, quality analysis, or
+fingerprint run. **Historical behavior does not predict a wallet's next
+action** — every candidate is a description of past and current stored
+evidence, not a prediction.
+
+**Wallet Style Memory V1** re-surfaces exact fields already computed by the
+existing quality-analysis and strategy-fingerprint calculations for each
+selected wallet — it is a deterministic lookup, **not** a trained or
+machine-learning model. Each wallet's style is described **separately and
+never averaged together**; a wallet without current, sufficient research gets
+an explicit "not enough evidence" sentence instead of a guess.
+
+**Candidates** are tokens a selected wallet recently bought and/or currently
+holds an open reconstructed position in, reinforced by repeat buys, multiple
+corroborating wallets, continued holding, or limited selling. Transfer-only
+evidence, development-seed data, and unsupported/legacy-decoded events never
+count. Evidence is broken into separate dimensions (wallet interest,
+accumulation, holding conviction, style match, distribution pressure, data
+quality) rather than one mystery score. Each candidate gets one of six
+deterministic states, evaluated in a fixed, documented order —
+`DISTRIBUTION_RISK` → `BUILDING` → `HOLDING` → `MIXED` → `COOLING` →
+`INSUFFICIENT_EVIDENCE` — and a confidence level (`LOW`/`MODERATE`/`HIGHER`,
+0–100 score) that measures **evidence strength only, never a profit
+probability**; small samples or stale research can never reach `HIGHER`. A
+frontend-only headline ("NO TRADE", "HIGH-CONVICTION ACCUMULATION", …) is
+derived from state + confidence for Simple Mode — the backend itself never
+encodes a "call."
+
+`POST /api/slow-cook/analyze` takes `{ walletIds, lookbackDays?,
+minimumWallets?, limit?, includeLowerConfidence? }` (defaults: 30-day
+lookback, 1 minimum wallet, 20-candidate limit, lower-confidence results
+hidden), rejects development wallets, unknown wallet IDs, duplicate wallet
+IDs, and empty selections, and stamps every result with methodology version
+`slow-cook-v1`. "Slow Cook" is in Simple Mode's nav between Coin Check and
+Alerts, and in Quant Mode's nav and the Advanced directory; it reuses the
+existing wallet-search hook and label component, with methodology/score
+detail collapsed for Simple Mode.
+
+A **FOMO Simulator** that would act on these candidates is a later, not-yet-
+built phase — Slow Cook's candidate output already carries the fields it
+would need (token, state, evidence confidence, timestamp, selected wallet
+IDs, entry snapshot, entry price, reasons, invalidation conditions), but no
+paper calls exist yet. This phase needed **no new database migration** — it
+is entirely read-only against existing tables.
+
 ## Development seed data
 
 `POST /api/dev/seed` (or the "Seed development data" button on the Tokens page)

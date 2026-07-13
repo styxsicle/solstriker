@@ -13,6 +13,7 @@ export type PageId =
   | 'home'
   | 'wallets'
   | 'tokens'
+  | 'slow-cook'
   | 'learn-wallet'
   | 'advanced'
   | 'overview'
@@ -34,6 +35,7 @@ export const SIMPLE_NAV: NavItem[] = [
   { id: 'home', label: 'Home', icon: '⌂' },
   { id: 'wallets', label: 'Wallets', icon: '◈' },
   { id: 'tokens', label: 'Coin Check', icon: '❖' },
+  { id: 'slow-cook', label: 'Slow Cook', icon: '🐢' },
   { id: 'alerts' as PageId, label: 'Alerts', icon: '🔔', disabled: true },
   { id: 'my-positions' as PageId, label: 'My Positions', icon: '◫', disabled: true },
   { id: 'advanced', label: 'Advanced', icon: '⚙' },
@@ -47,6 +49,7 @@ export const QUANT_NAV: NavItem[] = [
   { id: 'tokens', label: 'Tokens', icon: '❖' },
   { id: 'intelligence', label: 'Wallet Intelligence', icon: '⌁' },
   { id: 'focus', label: 'Focus Trader Lab', icon: '◉' },
+  { id: 'slow-cook', label: 'Slow Cook', icon: '🐢' },
   { id: 'help', label: 'Help', icon: '✚' },
 ];
 

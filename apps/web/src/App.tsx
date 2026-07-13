@@ -12,6 +12,7 @@ import { TokensPage } from './pages/TokensPage';
 import { HelpPage } from './pages/HelpPage';
 import { WalletIntelligencePage } from './pages/WalletIntelligencePage';
 import { FocusTraderLabPage } from './pages/FocusTraderLabPage';
+import { SlowCookPage } from './pages/SlowCookPage';
 
 function pageFromHash(fallback: PageId): PageId {
   const hash = window.location.hash.replace(/^#\/?/, '');
@@ -85,6 +86,7 @@ function Shell() {
           {page === 'tokens' && <TokensPage />}
           {page === 'intelligence' && <WalletIntelligencePage />}
           {page === 'focus' && <FocusTraderLabPage />}
+          {page === 'slow-cook' && <SlowCookPage onNavigate={navigate} />}
           {page === 'help' && <HelpPage />}
 
           <p className="footer-note">

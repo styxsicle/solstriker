@@ -610,6 +610,144 @@ export interface PrepareBatchResult {
   results: PrepareWalletResult[];
 }
 
+// --- Slow Cook V1 ---
+
+export type SlowCookEvidenceState = 'SUFFICIENT' | 'LIMITED' | 'INSUFFICIENT';
+export type SlowCookCandidateState = 'BUILDING' | 'HOLDING' | 'MIXED' | 'COOLING' | 'DISTRIBUTION_RISK' | 'INSUFFICIENT_EVIDENCE';
+export type SlowCookConfidenceLevel = 'LOW' | 'MODERATE' | 'HIGHER';
+export type SlowCookMarketFreshness = 'FRESH' | 'AGING' | 'STALE';
+
+export interface SlowCookRequest {
+  walletIds: string[];
+  lookbackDays?: number;
+  minimumWallets?: number;
+  limit?: number;
+  includeLowerConfidence?: boolean;
+}
+
+export interface SlowCookOptions {
+  lookbackDays: number;
+  minimumWallets: number;
+  limit: number;
+  includeLowerConfidence: boolean;
+}
+
+export interface SlowCookWalletStyleMemory {
+  walletId: string;
+  address: string;
+  label: string | null;
+  evidenceState: SlowCookEvidenceState;
+  summarySentences: string[];
+  styleTags: string[];
+  metrics: {
+    eligibleCycleCount: number | null;
+    eligibleClosedCount: number | null;
+    medianHoldingSeconds: string | null;
+    medianBuysPerCycle: string | null;
+    medianSellsPerCycle: string | null;
+    fullyClosedCycleCount: number | null;
+    openCycleCount: number | null;
+    medianFirstSellInventoryPct: string | null;
+    medianRemainingAfterFirstSellPct: string | null;
+    medianPositionSizeSol: string | null;
+    observedMaxConcurrentPositions: number | null;
+    rawPositiveRatePct: string | null;
+    medianRawRoiPct: string | null;
+    largestGainContributionPct: string | null;
+    transferAffectedCount: number | null;
+    unmatchedSellCount: number | null;
+    completeHistory: boolean | null;
+  };
+  ids: {
+    reconstructionRunId: string | null;
+    qualityMetricSetId: string | null;
+    fingerprintId: string | null;
+    fingerprintRunId: string | null;
+    fingerprintCalculationVersion: number | null;
+  };
+}
+
+export interface SlowCookCandidateWalletDetail {
+  walletId: string;
+  address: string;
+  label: string | null;
+  buyCount: number;
+  sellCount: number;
+  hasOpenPosition: boolean;
+  firstBuyAt: string | null;
+  lastBuyAt: string | null;
+  styleMatch: string | null;
+}
+
+export interface SlowCookCandidate {
+  tokenId: string;
+  mintAddress: string;
+  name: string | null;
+  symbol: string | null;
+  state: SlowCookCandidateState;
+  confidence: SlowCookConfidenceLevel;
+  confidenceScore: number;
+  confidenceComponents: Record<string, number>;
+  walletInterest: {
+    walletsWithEvidenceCount: number;
+    recentBuyCount: number;
+    openPositionWalletCount: number;
+    mostRecentActivityAt: string | null;
+  };
+  accumulation: {
+    repeatBuyWalletCount: number;
+    addsAfterEntryCount: number;
+    recentBuyCount: number;
+    recentSellCount: number;
+    stillOpenCount: number;
+  };
+  holdingConviction: {
+    secondsSinceFirstBuy: number | null;
+    secondsSinceLastBuy: number | null;
+    detectedSellCount: number;
+    openPositionCount: number;
+  };
+  dataQuality: {
+    contributingWalletsCurrentCount: number;
+    contributingWalletsStaleOrMissingCount: number;
+    transferAffectedWalletCount: number;
+    unmatchedSellWalletCount: number;
+    marketSnapshotStatus: 'AVAILABLE' | 'STALE' | 'UNAVAILABLE';
+    marketFreshness: SlowCookMarketFreshness | null;
+  };
+  distributionPressure: {
+    detectedSellCount: number;
+    walletsSellingCount: number;
+    label: 'LOW_DETECTED_DISTRIBUTION' | 'MIXED_ACTIVITY' | 'ELEVATED_DETECTED_SELLING';
+  };
+  styleMatchSummary: string;
+  wallets: SlowCookCandidateWalletDetail[];
+  whyThisAppeared: string[];
+  whatCouldInvalidate: string[];
+  market: {
+    priceUsd: string | null;
+    marketCapUsd: string | null;
+    liquidityUsd: string | null;
+    volume24hUsd: string | null;
+    priceChange24hPct: string | null;
+    observedAt: string | null;
+    freshness: SlowCookMarketFreshness | null;
+  } | null;
+}
+
+export interface SlowCookResult {
+  calculationVersion: string;
+  analyzedAt: string;
+  requestedWalletIds: string[];
+  options: SlowCookOptions;
+  walletsAnalyzed: number;
+  walletsWithUsableStyle: number;
+  styleMemories: SlowCookWalletStyleMemory[];
+  candidates: SlowCookCandidate[];
+  candidatesFound: number;
+  strongerCandidateCount: number;
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { 'content-type': 'application/json' },

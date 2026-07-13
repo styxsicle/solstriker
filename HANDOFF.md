@@ -201,6 +201,7 @@ Migrations: `20260711012659_init`, `20260711031157_wallet_activity`,
 | `GET /api/wallet-strategies/:walletId/patterns` | Same, filterable by `patternType` |
 | `GET /api/wallet-strategy-runs/:id` | Historical audit run detail |
 | `POST /api/focus-wallets/prepare` | Body `{ walletIds: string[] (1–5), syncTransactionLimit? (default 500), continueHistoricalSync?, forceRefresh? }`. User-triggered only. Orchestrates `syncWallet` → `reconstructWallets` → `analyzeWallets` → `analyzeStrategies` sequentially per wallet, reusing each service function directly (no HTTP self-calls, no duplicated math, no new migration). Per-stage skip-when-current logic; later stages `NOT_STARTED` when an earlier required stage failed; per-wallet in-process lock (409 `wallet_prepare_in_progress`); per-wallet failure isolation (a defense-in-depth catch in the batch loop guarantees one wallet's failure can never abort the others) |
+| `POST /api/slow-cook/analyze` | Body `{ walletIds: string[] (1–10), lookbackDays? (default 30), minimumWallets? (default 1), limit? (default 20), includeLowerConfidence? (default false) }`. Read-only and strictly scoped to the requested wallet IDs — never syncs, reconstructs, analyzes, fingerprints, or calls a provider. 400 `validation_error` / `duplicate_selection` / `unknown_wallet` / `dev_wallet_excluded`; sanitized 500 `slow_cook_analysis_failed`. Returns Wallet Style Memory per wallet plus deterministic candidates, all stamped `calculationVersion: "slow-cook-v1"` |
 
 There is deliberately **no** ranking, leaderboard, top-wallet, best-wallet or
 ownership-inference endpoint, and none may be added.
@@ -555,6 +556,95 @@ horizontally. Missing values show "unknown", never zero.
 **Phase 2C-B — Related-wallet funding relationships, shared-entry timing
 evidence, leader/follower sequencing, and non-accusatory relationship
 heuristics.** Do not begin it implicitly.
+
+## Slow Cook V1 implementation notes
+
+- Read-only research checkpoint, not part of the Phase 2C-B roadmap track.
+  No migration: `apps/api/src/services/slowCook/{styleMemory,candidates,analyze}.ts`
+  are a pure read layer over existing `WalletEvent`, `WalletPosition`,
+  quality-metric, and fingerprint tables — nothing is written, and no
+  provider is called.
+- **Scope is enforced at every query.** `buildWalletStyleMemories` and
+  `buildSlowCookCandidates` both take the explicit `walletIds` array as their
+  only source of wallet identity; every Prisma query filters
+  `walletId: { in: walletIds }`. There is no "analyze every wallet" mode and
+  no code path that widens the set after validation in `routes/slowCook.ts`
+  (which itself 400s on unknown wallet IDs, duplicate wallet IDs, and
+  dev-seed wallets before the service ever runs).
+- **Wallet Style Memory V1 is deterministic re-surfacing, not ML.** It reuses
+  the shared currentness helpers (`services/walletResearch/currentness.ts`,
+  the same ones the BN audit extracted) to find each wallet's own latest
+  *current* reconstruction/quality/fingerprint, then copies exact stored
+  fields into plain-language sentences built from the fingerprint's own
+  descriptor codes. Each wallet's `WalletStyleMemory` is built and returned
+  independently — styles are never combined, averaged, or blended across
+  wallets, and the UI states this explicitly ("styles are never averaged
+  together"). `evidenceStateFor()` maps a null/too-small eligible-cycle count
+  straight to `INSUFFICIENT`, which produces the fixed fallback sentence
+  ("Not enough clean completed trades are available to describe this wallet
+  reliably.") instead of guessing.
+- **Candidate states are evaluated in one fixed, documented order** in
+  `classifyState()` (`services/slowCook/candidates.ts`): selling ≥ buying (or
+  a same-wallet quick flip) → `DISTRIBUTION_RISK`; repeat buys with zero
+  detected selling → `BUILDING`; an open reconstructed position with zero
+  selling → `HOLDING`; wallets pulling in opposite directions → `MIXED`;
+  activity older than 66% of the lookback window → `COOLING`; otherwise
+  `INSUFFICIENT_EVIDENCE`. The first matching rule wins — states are mutually
+  exclusive by construction, not by post-hoc filtering.
+- **Confidence is evidence strength, never a profit probability.**
+  `computeConfidence()` sums four bounded, documented components — wallet
+  count (0–50), style-evidence sufficiency (0–20), reconstruction currentness
+  (0–20), and market-snapshot freshness (0–10) — minus a contamination
+  penalty for transfer-affected or unmatched-sell evidence, clamped to
+  0–100. `confidenceLevel()` maps ≥70 to `HIGHER`, ≥40 to `MODERATE`, else
+  `LOW`. A small wallet sample or stale research structurally caps the score
+  well below 70, so `HIGHER` is unreachable without both a real sample and
+  current research — this is enforced by the formula's shape, not a special
+  case. Every component is exposed in `confidenceComponents` for Quant Mode.
+- **The 7th state, "NO TRADE," is frontend-only.** `lib/slowCookWording.ts`'s
+  `slowCookHeadline(state, confidence)` maps `LOW` confidence or
+  `INSUFFICIENT_EVIDENCE` state to the literal headline "NO TRADE", and
+  `HIGHER` confidence to a "HIGH-CONVICTION " prefix on the state's own
+  headline. The backend's `CandidateState` enum has no matching value — this
+  keeps the backend strictly evidence-based while giving Simple Mode a
+  direct one-line answer.
+- **No guaranteed-profit or automatic-trading language anywhere.** The page
+  states outright: "This is research, not a trading system. It never
+  connects a wallet, never signs anything, never buys or sells, and never
+  guarantees a profit. Historical behavior does not predict a wallet's next
+  action." Confidence text always ends "Not a profit probability."
+  `test/slowCook/analyze.test.ts` includes a dedicated assertion that this
+  banned language never appears in any response.
+- Frontend: "Slow Cook" sits in `SIMPLE_NAV` between `tokens` (Coin Check)
+  and the disabled `alerts` entry, and in `QUANT_NAV` before Help
+  (`apps/web/src/components/Sidebar.tsx`), plus a directory entry on
+  `AdvancedPage.tsx`. `SlowCookPage.tsx` reuses `useWalletSearch` and
+  `WalletLabel` exactly as the other wallet pickers do (search, pinned
+  selections, distinct-by-address duplicate labels, no auto-selection).
+  Methodology version, confidence score/components, and IDs are gated behind
+  `mode === 'quant'`, matching every other Quant-only detail table in the app.
+- FOMO Simulator remains explicitly out of scope for this phase — not built,
+  no route, no UI. Candidate objects already carry the fields it would need
+  (token, state, evidence confidence, `analyzedAt`, selected wallet IDs,
+  snapshot/market fields, `whyThisAppeared`/`whatCouldInvalidate` reasons,
+  `calculationVersion`) so a later phase can consume them without a shape
+  change, but no paper call is persisted anywhere yet.
+- Verification: shared 22, API 297 (268 + 29 new), frontend 154 (132 + 22
+  new) = **473 tests**; lint and build pass. The 29 new API tests
+  (`test/slowCook/analyze.test.ts`) cover selection scoping/no-leakage,
+  transfer-only exclusion, dev-wallet/dev-token exclusion,
+  accumulation/distribution signals, duplicate-label distinctness,
+  open-position representation, null-vs-zero handling, staleness, confidence
+  ceilings for small samples, `MIXED`-state detection, per-wallet style
+  separation, determinism, zero side effects (no provider calls, no DB
+  mutations, no new analysis runs), banned-language absence, and validation
+  errors. The BN Main audit was not redone or expanded in this phase.
+- Manual verification: read-only `curl` calls against a running dev server
+  for two real wallets — one with no usable research (correctly returned the
+  `INSUFFICIENT` evidence state and an empty candidate list) and one with
+  real fingerprint data (returned a correct style memory summary). Database
+  row counts were identical before and after, and `PRAGMA integrity_check`
+  returned `ok`.
 
 ## BN Main wallet readiness audit implementation notes
 

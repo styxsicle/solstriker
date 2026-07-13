@@ -3,6 +3,9 @@ import type {
   ActivityEvent,
   FocusCohort,
   MarketSnapshot,
+  SlowCookCandidate,
+  SlowCookResult,
+  SlowCookWalletStyleMemory,
   StrategyFingerprint,
   StrategyPattern,
   Token,
@@ -323,6 +326,118 @@ export function makeCohort(overrides: Partial<FocusCohort> = {}): FocusCohort {
         canAnalyze: false,
       },
     },
+    ...overrides,
+  };
+}
+
+// --- Slow Cook V1 ---
+
+export function makeSlowCookStyleMemory(overrides: Partial<SlowCookWalletStyleMemory> = {}): SlowCookWalletStyleMemory {
+  return {
+    walletId: 'wallet-1',
+    address: FAKE_WALLET.address,
+    label: FAKE_WALLET.label,
+    evidenceState: 'SUFFICIENT',
+    summarySentences: ['Often adds to a position after the first buy.', 'Evidence is based on 6 eligible completed position cycle(s).'],
+    styleTags: ['FREQUENTLY_SCALES_IN'],
+    metrics: {
+      eligibleCycleCount: 6,
+      eligibleClosedCount: 5,
+      medianHoldingSeconds: '900',
+      medianBuysPerCycle: '2',
+      medianSellsPerCycle: '1',
+      fullyClosedCycleCount: 5,
+      openCycleCount: 1,
+      medianFirstSellInventoryPct: '50',
+      medianRemainingAfterFirstSellPct: '50',
+      medianPositionSizeSol: '0.2',
+      observedMaxConcurrentPositions: 2,
+      rawPositiveRatePct: '60',
+      medianRawRoiPct: '20',
+      largestGainContributionPct: '30',
+      transferAffectedCount: 0,
+      unmatchedSellCount: 0,
+      completeHistory: true,
+    },
+    ids: {
+      reconstructionRunId: 'reconstruction-run-1',
+      qualityMetricSetId: 'quality-set-1',
+      fingerprintId: 'fingerprint-1',
+      fingerprintRunId: 'strategy-run-1',
+      fingerprintCalculationVersion: 1,
+    },
+    ...overrides,
+  };
+}
+
+export function makeSlowCookCandidate(overrides: Partial<SlowCookCandidate> = {}): SlowCookCandidate {
+  return {
+    tokenId: 'token-1',
+    mintAddress: FAKE_MINT,
+    name: 'Fixture Meme',
+    symbol: 'FIXT',
+    state: 'HOLDING',
+    confidence: 'HIGHER',
+    confidenceScore: 80,
+    confidenceComponents: { walletCountScore: 10, styleEvidenceScore: 20, currentnessScore: 20, marketScore: 10, contaminationPenalty: 0 },
+    walletInterest: {
+      walletsWithEvidenceCount: 1,
+      recentBuyCount: 1,
+      openPositionWalletCount: 1,
+      mostRecentActivityAt: '2026-07-11T00:00:00.000Z',
+    },
+    accumulation: { repeatBuyWalletCount: 0, addsAfterEntryCount: 0, recentBuyCount: 1, recentSellCount: 0, stillOpenCount: 1 },
+    holdingConviction: { secondsSinceFirstBuy: 86400, secondsSinceLastBuy: 86400, detectedSellCount: 0, openPositionCount: 1 },
+    dataQuality: {
+      contributingWalletsCurrentCount: 1,
+      contributingWalletsStaleOrMissingCount: 0,
+      transferAffectedWalletCount: 0,
+      unmatchedSellWalletCount: 0,
+      marketSnapshotStatus: 'AVAILABLE',
+      marketFreshness: 'FRESH',
+    },
+    distributionPressure: { detectedSellCount: 0, walletsSellingCount: 0, label: 'LOW_DETECTED_DISTRIBUTION' },
+    styleMatchSummary: '1 selected wallet(s) historically tend to add to positions before exiting. Their current activity on this token includes 1 detected buy(s) and no detected sell yet.',
+    wallets: [
+      {
+        walletId: 'wallet-1',
+        address: FAKE_WALLET.address,
+        label: FAKE_WALLET.label,
+        buyCount: 1,
+        sellCount: 0,
+        hasOpenPosition: true,
+        firstBuyAt: '2026-07-11T00:00:00.000Z',
+        lastBuyAt: '2026-07-11T00:00:00.000Z',
+        styleMatch: "Current activity (1 buy(s)) matches this wallet's typical entry pattern (~2 per cycle).",
+      },
+    ],
+    whyThisAppeared: ['1 selected wallet(s) interacted with the token', '1 recent buy(s) were detected'],
+    whatCouldInvalidate: ['New sell activity could occur at any time'],
+    market: {
+      priceUsd: '0.000004089',
+      marketCapUsd: '363418575',
+      liquidityUsd: '122349.87',
+      volume24hUsd: '260503.7',
+      priceChange24hPct: '-0.6',
+      observedAt: '2026-07-12T00:00:00.000Z',
+      freshness: 'FRESH',
+    },
+    ...overrides,
+  };
+}
+
+export function makeSlowCookResult(overrides: Partial<SlowCookResult> = {}): SlowCookResult {
+  return {
+    calculationVersion: 'slow-cook-v1',
+    analyzedAt: '2026-07-12T00:00:00.000Z',
+    requestedWalletIds: ['wallet-1'],
+    options: { lookbackDays: 30, minimumWallets: 1, limit: 20, includeLowerConfidence: false },
+    walletsAnalyzed: 1,
+    walletsWithUsableStyle: 1,
+    styleMemories: [makeSlowCookStyleMemory()],
+    candidates: [makeSlowCookCandidate()],
+    candidatesFound: 1,
+    strongerCandidateCount: 1,
     ...overrides,
   };
 }

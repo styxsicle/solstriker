@@ -197,6 +197,45 @@ signing, and real trades.
   coordination inference performed — this checkpoint only inspects existing
   data before Phase 2C-B begins.
 
+### ✅ Slow Cook V1 (complete — read-only research checkpoint)
+
+- `POST /api/slow-cook/analyze`: a user-triggered, read-only research query
+  scoped strictly to explicitly selected wallets (1–10). Never synchronizes,
+  reconstructs, runs quality analysis, generates a fingerprint, calls a
+  provider, or mutates the database.
+- Wallet Style Memory V1 (`services/slowCook/styleMemory.ts`): a
+  deterministic re-surfacing of each selected wallet's own already-computed
+  quality/fingerprint fields — not a trained model — kept strictly separate
+  per wallet (never averaged) with an explicit "not enough evidence"
+  fallback.
+- Candidate engine (`services/slowCook/candidates.ts`): a token becomes a
+  candidate only via a selected wallet's recent BUY activity and/or a
+  current open reconstructed position; excludes transfer-only evidence,
+  dev-seed data, and unsupported/legacy-decoded events. Evidence is split
+  into separate dimensions (wallet interest, accumulation, holding
+  conviction, style match, distribution pressure, data quality) instead of
+  one score. Six deterministic states evaluated in fixed order
+  (`DISTRIBUTION_RISK` → `BUILDING` → `HOLDING` → `MIXED` → `COOLING` →
+  `INSUFFICIENT_EVIDENCE`); confidence (`LOW`/`MODERATE`/`HIGHER`, 0–100) is
+  evidence strength only, never a profit probability — small samples/stale
+  research can never reach `HIGHER`.
+- A frontend-only "NO TRADE" / "HIGH-CONVICTION …" headline
+  (`lib/slowCookWording.ts`) derives from state + confidence; the backend
+  itself has no such 7th state and stays strictly evidence-based.
+- Methodology version `slow-cook-v1` exposed on every result. Rejects
+  dev-seed wallets, unknown wallet IDs, duplicate wallet IDs, and empty
+  selections.
+- Simple Mode nav: Home · Wallets · Coin Check · **Slow Cook** · Alerts · My
+  Positions · Advanced; also reachable from Quant Mode's nav and Advanced.
+  Reuses the existing wallet-search hook and label component; methodology
+  version, confidence components, and IDs stay collapsed/hidden in Simple
+  Mode.
+- No new migration — entirely read-only against existing tables.
+- FOMO Simulator remains a later, not-yet-built phase; candidate output is
+  already structured to support it (token, state, evidence confidence,
+  timestamp, selected wallet IDs, entry snapshot, entry price, reasons,
+  invalidation conditions) but no paper calls are persisted yet.
+
 ### ⏭ Phase 2C-B — Related-wallet funding relationships, shared-entry timing evidence, leader/follower sequencing, and non-accusatory relationship heuristics (next checkpoint)
 
 - Funding-transfer evidence between user-selected wallets, stated as observations

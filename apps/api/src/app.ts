@@ -18,6 +18,7 @@ import { registerWalletQualityRoutes } from './routes/walletQuality.js';
 import { registerFocusCohortRoutes } from './routes/focusCohorts.js';
 import { registerWalletStrategyRoutes } from './routes/walletStrategies.js';
 import { registerFocusWalletRoutes } from './routes/focusWallets.js';
+import { registerSlowCookRoutes } from './routes/slowCook.js';
 import type { SyncWalletOptions } from './services/activity/syncWallet.js';
 import { runDevSeed } from './services/seed.js';
 
@@ -87,6 +88,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     provider: deps.activityProvider,
     syncOptions: deps.syncOptions,
   });
+  registerSlowCookRoutes(app, prisma);
 
   app.post('/api/dev/seed', async (_request, reply) => {
     if (env.NODE_ENV === 'production') {

@@ -32,6 +32,11 @@ const LINKS: AdvancedLink[] = [
     description: 'Focus-wallet comparisons — how a selected wallet appears to enter, size and exit positions, compared side by side with other wallets you choose.',
   },
   {
+    page: 'slow-cook',
+    title: 'Slow Cook',
+    description: 'Patient, high-conviction setups from selected wallets — evidence-backed research, never a trading signal.',
+  },
+  {
     page: 'overview',
     title: 'Overview',
     description: 'Technical system status — application, database, Solana connection and every research-database count.',

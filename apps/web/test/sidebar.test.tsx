@@ -49,6 +49,20 @@ describe('Sidebar — Simple Mode navigation', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Coin Check/ }));
     expect(onNavigate).toHaveBeenCalledWith('tokens');
   });
+
+  it('shows Slow Cook as a functional item between Coin Check and Alerts', () => {
+    const onNavigate = renderSidebar('simple', 'home');
+    const names = screen.getAllByRole('button').map((button) => button.textContent ?? '');
+    const coinCheckIndex = names.findIndex((name) => name.includes('Coin Check'));
+    const slowCookIndex = names.findIndex((name) => name.includes('Slow Cook'));
+    const alertsIndex = names.findIndex((name) => name.includes('Alerts'));
+    expect(coinCheckIndex).toBeLessThan(slowCookIndex);
+    expect(slowCookIndex).toBeLessThan(alertsIndex);
+    const slowCookButton = screen.getByRole('button', { name: /^Slow Cook/ });
+    expect((slowCookButton as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(slowCookButton);
+    expect(onNavigate).toHaveBeenCalledWith('slow-cook');
+  });
 });
 
 describe('Sidebar — Quant Mode navigation', () => {
